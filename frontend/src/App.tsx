@@ -58,9 +58,17 @@ interface EscrowTask {
   deadline: string;
 }
 
+interface AgentReputationRecord {
+  agent: string;
+  score: string;
+  total_tasks: string;
+  successful_tasks: string;
+  failed_tasks: string;
+}
+
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'escrows' | 'create'>('escrows');
+  const [activeTab, setActiveTab] = useState<'escrows' | 'leaderboard' | 'create'>('escrows');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   // Contract Addresses (stored in localStorage or from env)
@@ -72,6 +80,7 @@ export default function App() {
   });
 
   const [tasks, setTasks] = useState<EscrowTask[]>([]);
+  const [leaderboard, setLeaderboard] = useState<AgentReputationRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [fetchingOnChain, setFetchingOnChain] = useState<boolean>(false);
   const [adjudicatingId, setAdjudicatingId] = useState<string | null>(null);
@@ -182,9 +191,42 @@ export default function App() {
     }
   }, [escrowContractAddress, account]);
 
+  // 100% REAL ON-CHAIN REPUTATION LEADERBOARD FETCHING VIA get_all_reputations()
+  const fetchLeaderboardFromContract = useCallback(async () => {
+    if (!reputationContractAddress || reputationContractAddress.trim() === '') {
+      setLeaderboard([]);
+      return;
+    }
+
+    try {
+      const client = createClient({
+        chain: STUDIONET_CONFIG as any,
+        endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0]
+      });
+
+      const rawJsonString = await client.readContract({
+        account: account as any,
+        address: reputationContractAddress as any,
+        functionName: 'get_all_reputations',
+        args: []
+      });
+
+      if (rawJsonString) {
+        const parsed: AgentReputationRecord[] = typeof rawJsonString === 'string' ? JSON.parse(rawJsonString) : rawJsonString;
+        parsed.sort((a, b) => Number(b.score) - Number(a.score));
+        setLeaderboard(parsed);
+      } else {
+        setLeaderboard([]);
+      }
+    } catch (err: any) {
+      console.error("Failed to read reputation leaderboard on-chain:", err);
+    }
+  }, [reputationContractAddress, account]);
+
   useEffect(() => {
     fetchTasksFromContract();
-  }, [fetchTasksFromContract]);
+    fetchLeaderboardFromContract();
+  }, [fetchTasksFromContract, fetchLeaderboardFromContract]);
 
   // CREATE ESCROW
   const handleCreateEscrow = async (e: React.FormEvent) => {
@@ -253,7 +295,6 @@ export default function App() {
         account: account as any
       });
 
-      // 15% of task amount
       const minStakeWei = (BigInt(task.amount) * BigInt(15)) / BigInt(100);
 
       await client.writeContract({
@@ -376,6 +417,7 @@ export default function App() {
       });
 
       await fetchTasksFromContract();
+      await fetchLeaderboardFromContract();
     } catch (err: any) {
       console.error(err);
       setTxError(err.message || "Failed to finalize payout.");
@@ -433,8 +475,8 @@ export default function App() {
       a: "Workers must lock a 15% collateral stake when claiming an OPEN task. This prevents spam job claims and ensures skin-in-the-game commitment."
     },
     {
-      q: "How does Untruncated Evidence Ingestion work?",
-      a: "The contract ingests full specification and deliverable web renders directly into the AI Jury prompt without character truncation, preventing premature evaluation failures."
+      q: "How does AgentReputation.py store agent scores?",
+      a: "AgentReputation is a standalone contract. Upon finalized adjudication payout, AgentEscrowCourt makes a cross-contract call to update AgentScore records (+10 points for success, -20 points for failure)."
     }
   ];
 
@@ -499,30 +541,37 @@ export default function App() {
             <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2 text-purple-300 font-mono">
                 <LinkIcon className="w-3.5 h-3.5 text-purple-400" />
-                <span>On-Chain Escrow Contract:</span>
+                <span>Contracts:</span>
               </div>
-              <div className="flex items-center gap-2 flex-1 max-w-xl">
+              <div className="flex items-center gap-3 flex-1 max-w-2xl flex-wrap">
                 <input
                   type="text"
-                  placeholder="Paste deployed AgentEscrowCourt address (0x...)"
+                  placeholder="Escrow Court (0x...)"
                   value={escrowContractAddress}
                   onChange={(e) => handleSaveAddresses(e.target.value, reputationContractAddress)}
-                  className="w-full px-3 py-1 bg-slate-950 border border-purple-900/50 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
+                  className="flex-1 px-3 py-1 bg-slate-950 border border-purple-900/50 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
+                />
+                <input
+                  type="text"
+                  placeholder="Agent Reputation (0x...)"
+                  value={reputationContractAddress}
+                  onChange={(e) => handleSaveAddresses(escrowContractAddress, e.target.value)}
+                  className="flex-1 px-3 py-1 bg-slate-950 border border-purple-900/50 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
                 />
                 <button
-                  onClick={fetchTasksFromContract}
+                  onClick={() => { fetchTasksFromContract(); fetchLeaderboardFromContract(); }}
                   disabled={fetchingOnChain}
                   className="px-3 py-1 bg-purple-800 hover:bg-purple-700 text-white rounded-lg font-medium flex items-center gap-1 transition"
                 >
                   <RefreshCw className={`w-3 h-3 ${fetchingOnChain ? 'animate-spin' : ''}`} />
-                  <span>Sync On-Chain</span>
+                  <span>Sync</span>
                 </button>
               </div>
             </div>
           </div>
         </header>
 
-        {/* ERROR NOTIFICATION BANNER */}
+        {/* ERROR BANNER */}
         {txError && (
           <div className="max-w-7xl mx-auto px-4 mt-4">
             <div className="p-3 bg-rose-950/70 border border-rose-800/60 rounded-xl text-xs text-rose-200 flex items-center justify-between gap-2">
@@ -575,14 +624,12 @@ export default function App() {
               <p className="text-[10px] text-slate-400 mt-1">Finalized on-chain</p>
             </div>
 
-            <div className="p-5 bg-gradient-to-br from-slate-900/90 to-rose-950/40 border border-rose-900/30 rounded-2xl shadow-xl">
-              <p className="text-xs font-semibold text-rose-400 flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4 text-rose-400" /> Disputed / Escalated
+            <div className="p-5 bg-gradient-to-br from-slate-900/90 to-amber-950/40 border border-amber-900/30 rounded-2xl shadow-xl">
+              <p className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+                <Trophy className="w-4 h-4 text-amber-400" /> AI Agent Leaderboard
               </p>
-              <h3 className="text-2xl font-black text-white mt-2">
-                {tasks.filter(t => t.status === 'DISPUTED' || t.status === 'ESCALATED').length}
-              </h3>
-              <p className="text-[10px] text-slate-400 mt-1">Arbitration protection</p>
+              <h3 className="text-2xl font-black text-white mt-2">{leaderboard.length}</h3>
+              <p className="text-[10px] text-slate-400 mt-1">Reputation contract records</p>
             </div>
           </div>
 
@@ -599,6 +646,18 @@ export default function App() {
               >
                 <Layers className="w-4 h-4" />
                 <span>Active Escrows ({tasks.length})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('leaderboard')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === 'leaderboard'
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-900/40'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Trophy className="w-4 h-4" />
+                <span>Agent Leaderboard ({leaderboard.length})</span>
               </button>
 
               <button
@@ -764,7 +823,7 @@ export default function App() {
                           </button>
                         )}
 
-                        {/* RAISE DISPUTE (during 24h cooling off) */}
+                        {/* RAISE DISPUTE */}
                         {task.status === 'AWAITING_PAYOUT' && account && (account === task.client || account === task.worker) && (
                           <button
                             onClick={() => setDisputeTargetId(task.id)}
@@ -774,7 +833,7 @@ export default function App() {
                           </button>
                         )}
 
-                        {/* FINALIZE PAYOUT (after 24h cooling off) */}
+                        {/* FINALIZE PAYOUT */}
                         {task.status === 'AWAITING_PAYOUT' && (
                           <button
                             onClick={() => handleFinalizePayout(task.id)}
@@ -865,7 +924,76 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 2: CREATE ESCROW FORM */}
+          {/* TAB 2: AGENT LEADERBOARD TAB */}
+          {activeTab === 'leaderboard' && (
+            <div className="space-y-4">
+              {!reputationContractAddress ? (
+                <div className="p-8 bg-slate-900/60 border border-purple-900/30 rounded-2xl text-center space-y-3">
+                  <Trophy className="w-10 h-10 text-amber-400 mx-auto animate-bounce" />
+                  <h3 className="text-lg font-bold text-white">No AgentReputation Contract Address Set</h3>
+                  <p className="text-xs text-slate-400 max-w-md mx-auto">
+                    Please deploy <code className="text-purple-300 bg-purple-950 px-1.5 py-0.5 rounded">AgentReputation.py v0.2.18</code> on GenStudio and paste its address in the top bar.
+                  </p>
+                </div>
+              ) : leaderboard.length === 0 ? (
+                <div className="p-8 bg-slate-900/60 border border-purple-900/30 rounded-2xl text-center space-y-3">
+                  <Trophy className="w-10 h-10 text-slate-500 mx-auto" />
+                  <h3 className="text-lg font-bold text-white">No Agent Reputation Records On-Chain</h3>
+                  <p className="text-xs text-slate-400">
+                    Once tasks are adjudicated and finalized, Agent scores will automatically appear on-chain.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-slate-900/80 border border-purple-900/30 rounded-2xl overflow-hidden shadow-2xl">
+                  <div className="p-4 bg-purple-950/40 border-b border-purple-900/30 flex justify-between items-center">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Trophy className="w-4 h-4 text-amber-400" /> On-Chain AI Agent Reputation Rankings
+                    </h3>
+                    <span className="text-xs font-mono text-purple-300">Live AgentReputation.py</span>
+                  </div>
+                  <div className="divide-y divide-purple-900/20 text-xs">
+                    {leaderboard.map((item, idx) => {
+                      const total = Number(item.total_tasks || 0);
+                      const succ = Number(item.successful_tasks || 0);
+                      const winRate = total > 0 ? Math.round((succ / total) * 100) : 100;
+
+                      return (
+                        <div key={item.agent} className="p-4 flex flex-wrap justify-between items-center gap-4 hover:bg-purple-950/20 transition">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-purple-950 border border-purple-800 flex items-center justify-center font-bold font-mono text-purple-300">
+                              #{idx + 1}
+                            </div>
+                            <div>
+                              <div className="font-mono font-bold text-white flex items-center gap-2">
+                                <span>{item.agent}</span>
+                                {idx === 0 && <span className="px-2 py-0.5 bg-amber-950 text-amber-300 border border-amber-800 text-[10px] rounded-full">Top Agent</span>}
+                              </div>
+                              <div className="text-[11px] text-slate-400 mt-0.5">
+                                Total Tasks: {item.total_tasks} | Success: {item.successful_tasks} | Failed: {item.failed_tasks}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-6 font-mono text-right">
+                            <div>
+                              <span className="text-[10px] text-slate-400 block">Win Rate</span>
+                              <span className="text-sm font-bold text-emerald-400">{winRate}%</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block">Reputation Score</span>
+                              <span className="text-xl font-black text-amber-400">{item.score} pts</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: CREATE ESCROW FORM */}
           {activeTab === 'create' && (
             <div className="max-w-2xl mx-auto p-6 bg-slate-900/90 border border-purple-900/40 rounded-2xl shadow-2xl space-y-6">
               <div>
@@ -987,7 +1115,7 @@ export default function App() {
           <span>GenLayer Studionet (Chain ID 61999)</span>
         </div>
         <p className="text-[11px] text-slate-400">
-          GenLayer Steward Compliant Architecture: 24h Cooling Off • Untruncated Web Renders • 15% Collateral Staking
+          GenLayer Steward Compliant Architecture: 24h Cooling Off • Untruncated Web Renders • 15% Collateral Staking • AgentReputation.py
         </p>
       </footer>
     </div>

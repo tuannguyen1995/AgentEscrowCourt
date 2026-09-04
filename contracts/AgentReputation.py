@@ -1,51 +1,113 @@
+# v0.2.18
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 from genlayer import *
+from dataclasses import dataclass
+import json
+
+@allow_storage
+@dataclass
+class AgentScore:
+    agent: str
+    score: bigint
+    total_tasks: bigint
+    successful_tasks: bigint
+    failed_tasks: bigint
 
 class Contract(gl.Contract):
-    scores: TreeMap[str, u256]
-    owner: Address
-    authorized_court: Address
+    platform_admin: str
+    authorized_court: str
+    scores: TreeMap[str, AgentScore]
+    agent_list: DynArray[str]
 
     def __init__(self):
-        self.owner = gl.message.sender
-        self.authorized_court = gl.message.sender
+        caller = self._get_caller()
+        self.platform_admin = caller
+        self.authorized_court = caller
+
+    def _get_caller(self) -> str:
+        try:
+            return str(gl.message.sender).lower()
+        except Exception:
+            return str(getattr(gl.message, "sender_address", "0x0000000000000000000000000000000000000000")).lower()
 
     @gl.public.write
-    def set_authorized_court(self, court_address: Address) -> None:
-        if gl.message.sender != self.owner:
-            raise UserError("Only owner can set authorized court")
-        self.authorized_court = court_address
+    def set_authorized_court(self, court_address: str) -> None:
+        caller = self._get_caller()
+        if caller != self.platform_admin:
+            raise UserError("Only platform admin can set authorized court")
+        if not court_address.startswith("0x") or len(court_address.strip()) != 42:
+            raise UserError("Invalid court contract address format")
+        self.authorized_court = court_address.lower().strip()
 
     @gl.public.write
-    def update_reputation(self, agent: Address, is_success: bool) -> None:
-        if gl.message.sender != self.authorized_court and gl.message.sender != self.owner:
-            raise UserError("Unauthorized caller")
+    def update_reputation(self, agent: str, is_success: bool) -> None:
+        """
+        Called exclusively by the authorized AgentEscrowCourt contract upon finalized adjudication.
+        """
+        caller = self._get_caller()
+        if caller != self.authorized_court and caller != self.platform_admin:
+            raise UserError(f"Unauthorized caller: {caller}. Expected court: {self.authorized_court}")
 
-        agent_str = _addr_to_str(agent)
-        current_score = u256(100)
-        if agent_str in self.scores:
-            current_score = self.scores[agent_str]
+        agent_key = str(agent).lower().strip()
+
+        if agent_key in self.scores:
+            record = self.scores[agent_key]
+        else:
+            record = AgentScore(
+                agent=agent_key,
+                score=bigint(100),       # Initial baseline score: 100
+                total_tasks=bigint(0),
+                successful_tasks=bigint(0),
+                failed_tasks=bigint(0)
+            )
+            self.agent_list.append(agent_key)
+
+        record.total_tasks += bigint(1)
 
         if is_success:
-            current_score = current_score + u256(10)
+            record.successful_tasks += bigint(1)
+            record.score += bigint(10)
         else:
-            if current_score >= u256(20):
-                current_score = current_score - u256(20)
+            record.failed_tasks += bigint(1)
+            if record.score >= bigint(20):
+                record.score -= bigint(20)
             else:
-                current_score = u256(0)
+                record.score = bigint(0)
 
-        self.scores[agent_str] = current_score
+        self.scores[agent_key] = record
 
     @gl.public.view
-    def get_reputation(self, agent: Address) -> u256:
-        agent_str = _addr_to_str(agent)
-        if agent_str in self.scores:
-            return self.scores[agent_str]
-        return u256(100)
+    def get_reputation(self, agent: str) -> str:
+        agent_key = str(agent).lower().strip()
+        if agent_key in self.scores:
+            s = self.scores[agent_key]
+            return json.dumps({
+                "agent": s.agent,
+                "score": str(s.score),
+                "total_tasks": str(s.total_tasks),
+                "successful_tasks": str(s.successful_tasks),
+                "failed_tasks": str(s.failed_tasks)
+            })
+        return json.dumps({
+            "agent": agent_key,
+            "score": "100",
+            "total_tasks": "0",
+            "successful_tasks": "0",
+            "failed_tasks": "0"
+        })
 
-
-def _addr_to_str(addr: Address) -> str:
-    try:
-        return addr.as_hex
-    except Exception:
-        return str(addr)
+    @gl.public.view
+    def get_all_reputations(self) -> str:
+        """Public view allowing the frontend to render the Agent Leaderboard authoritatively."""
+        res = []
+        for a in self.agent_list:
+            if a in self.scores:
+                s = self.scores[a]
+                res.append({
+                    "agent": s.agent,
+                    "score": str(s.score),
+                    "total_tasks": str(s.total_tasks),
+                    "successful_tasks": str(s.successful_tasks),
+                    "failed_tasks": str(s.failed_tasks)
+                })
+        return json.dumps(res)
