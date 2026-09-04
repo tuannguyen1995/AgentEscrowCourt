@@ -15,12 +15,12 @@ class Contract(gl.Contract):
     def __init__(self):
         self.platform_admin = gl.message.sender_address
         self.authorized_court = gl.message.sender_address
-        self.scores = TreeMap()
-        self.total_tasks = TreeMap()
-        self.successful_tasks = TreeMap()
-        self.failed_tasks = TreeMap()
+        self.scores = TreeMap[Address, u256]()
+        self.total_tasks = TreeMap[Address, u256]()
+        self.successful_tasks = TreeMap[Address, u256]()
+        self.failed_tasks = TreeMap[Address, u256]()
         self.agent_count = u256(0)
-        self.agents = TreeMap()
+        self.agents = TreeMap[u256, Address]()
 
     @gl.public.write
     def set_authorized_court(self, court_address: Address) -> None:
