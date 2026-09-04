@@ -50,6 +50,7 @@ interface EscrowTask {
   worker: string;
   title: string;
   criteria_url: string;
+  criteria_hash?: string;
   deliverable_url: string;
   amount: string;
   worker_stake: string;
@@ -98,6 +99,7 @@ export default function App() {
   const [taskIdInput, setTaskIdInput] = useState('');
   const [title, setTitle] = useState('');
   const [criteriaUrl, setCriteriaUrl] = useState('');
+  const [criteriaHash, setCriteriaHash] = useState('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
   const [amount, setAmount] = useState('1.0');
   const [deadlineHours, setDeadlineHours] = useState('72');
 
@@ -286,7 +288,7 @@ export default function App() {
         account: account as any,
         address: escrowContractAddress as any,
         functionName: 'create_escrow',
-        args: [tid, title, criteriaUrl, BigInt(deadlineHours)],
+        args: [tid, title, criteriaUrl, criteriaHash || "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", BigInt(deadlineHours)],
         value: weiAmount
       });
 

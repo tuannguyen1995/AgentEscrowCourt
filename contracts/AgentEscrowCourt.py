@@ -2,6 +2,7 @@
 from genlayer import *
 from dataclasses import dataclass
 import json
+import hashlib
 
 @allow_storage
 @dataclass
@@ -11,6 +12,7 @@ class EscrowTask:
     worker: str
     title: str
     criteria_url: str
+    criteria_hash: str     # Cryptographic proof pinning (Steward requirement)
     deliverable_url: str
     amount: bigint
     worker_stake: bigint
@@ -30,32 +32,30 @@ class Contract(gl.Contract):
 
     def __init__(self):
         try:
-            self.platform_admin = str(gl.message.sender).lower()
+            self.platform_admin = str(gl.message.sender_address).lower()
         except Exception:
-            self.platform_admin = str(getattr(gl.message, "sender_address", "0x0000000000000000000000000000000000000000")).lower()
-        self.reputation_contract = "0x0000000000000000000000000000000000000000"
+            self.platform_admin = str(getattr(gl.message, "sender", "0x0000000000000000000000000000000000000000")).lower()
+        self.reputation_contract = ""
         self.task_ids_json = "[]"
         self.tasks = TreeMap()
 
     def _get_caller(self) -> str:
         try:
-            return str(gl.message.sender).lower()
+            return str(gl.message.sender_address).lower()
         except Exception:
-            return str(getattr(gl.message, "sender_address", "0x0000000000000000000000000000000000000000")).lower()
+            return str(getattr(gl.message, "sender", "0x0000000000000000000000000000000000000000")).lower()
 
     def _get_current_timestamp(self) -> bigint:
-        """Derive trusted execution timestamp strictly from transaction context."""
-        try:
-            dt_raw = gl.message_raw.get("datetime", None) if isinstance(gl.message_raw, dict) else None
-            if dt_raw:
+        dt_raw = gl.message_raw.get("datetime", None) if isinstance(gl.message_raw, dict) else None
+        if dt_raw:
+            try:
                 from datetime import datetime
                 dt = datetime.fromisoformat(str(dt_raw).replace("Z", "+00:00"))
                 ts = int(dt.timestamp())
                 if ts > 0:
                     return bigint(ts)
-        except Exception:
-            pass
-        # Fallback to standard execution timestamp if context is omitted
+            except Exception:
+                pass
         import time
         return bigint(int(time.time()))
 
@@ -96,14 +96,16 @@ class Contract(gl.Contract):
         self.reputation_contract = rep_addr.lower().strip()
 
     @gl.public.write.payable
-    def create_escrow(self, task_id: str, title: str, criteria_url: str, deadline_hours: bigint = bigint(72)) -> None:
+    def create_escrow(self, task_id: str, title: str, criteria_url: str, criteria_hash: str = "", deadline_hours: bigint = bigint(72)) -> None:
         if task_id in self.tasks:
             raise UserError(f"Task ID {task_id} already exists")
         amount = gl.message.value
         if amount <= bigint(0):
             raise UserError("Escrow reward must be strictly greater than zero")
         if not criteria_url.startswith("http"):
-            raise UserError("Valid specification HTTP/HTTPS URL required")
+            raise UserError("Valid criteria HTTP/HTTPS URL required")
+
+        c_hash = criteria_hash.strip().lower() if criteria_hash else "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
         caller = self._get_caller()
         dur = deadline_hours * bigint(3600) if deadline_hours > bigint(0) else bigint(259200)
@@ -114,13 +116,14 @@ class Contract(gl.Contract):
             worker="0x0000000000000000000000000000000000000000",
             title=title.strip(),
             criteria_url=criteria_url.strip(),
+            criteria_hash=c_hash,
             deliverable_url="",
             amount=amount,
             worker_stake=bigint(0),
             status="OPEN",
             attempts=bigint(0),
             verdict="NONE",
-            verdict_reason="Awaiting worker acceptance and collateral lock",
+            verdict_reason="Awaiting worker acceptance & 15% collateral lock",
             confidence=bigint(0),
             payout_ready_at=bigint(0),
             deadline=self._get_current_timestamp() + dur
@@ -135,7 +138,6 @@ class Contract(gl.Contract):
 
     @gl.public.write.payable
     def accept_task(self, task_id: str) -> None:
-        """Worker locks 15% collateral stake to claim the escrow task."""
         if task_id not in self.tasks:
             raise UserError("Task not found")
         task = self.tasks[task_id]
@@ -148,7 +150,7 @@ class Contract(gl.Contract):
 
         min_stake = (task.amount * bigint(15)) // bigint(100)
         if gl.message.value < min_stake or gl.message.value <= bigint(0):
-            raise UserError(f"Insufficient worker stake. Minimum 15% required ({min_stake})")
+            raise UserError(f"Insufficient stake. Minimum 15% required ({min_stake})")
 
         task.worker = caller
         task.worker_stake = gl.message.value
@@ -176,6 +178,7 @@ class Contract(gl.Contract):
         task.deliverable_url = deliverable_url.strip()
 
         criteria_str = task.criteria_url
+        expected_c_hash = getattr(task, "criteria_hash", "")
         deliverable_str = task.deliverable_url
         task_title = task.title
         attempt_num = str(task.attempts)
@@ -185,7 +188,13 @@ class Contract(gl.Contract):
                 c_res = gl.nondet.web.render(criteria_str, mode="text")
                 c_text = str(c_res)
                 if any(err in c_text[:400].lower() for err in ["404 not found", "error 404"]):
-                    return {"verdict": "ESCALATE", "confidence": 100, "reason": "Criteria spec endpoint is 404; escrow locked."}
+                    return {"verdict": "ESCALATE", "confidence": 100, "reason": "Criteria spec endpoint is 404; escrow held."}
+                
+                # Verify criteria hash immutability if specified
+                if expected_c_hash and len(expected_c_hash) >= 10:
+                    computed_hash = hashlib.sha256(c_text.encode('utf-8')).hexdigest().lower()
+                    if computed_hash != expected_c_hash.lower():
+                        return {"verdict": "ESCALATE", "confidence": 100, "reason": f"Criteria spec was modified! Expected {expected_c_hash}, got {computed_hash}"}
             except Exception as e:
                 return {"verdict": "ESCALATE", "confidence": 100, "reason": f"Criteria fetch failed: {str(e)}"}
 
@@ -197,7 +206,6 @@ class Contract(gl.Contract):
             except Exception as e:
                 return {"verdict": "REFUND", "confidence": 100, "reason": f"Deliverable fetch failed: {str(e)}"}
 
-            # Untruncated full evidence ingestion
             prompt = f"""You are an impartial decentralized AI Court Judge on GenLayer evaluating an Escrow deliverable.
 Task Title: {task_title}
 Attempt: {attempt_num} / 3
@@ -258,7 +266,6 @@ Respond ONLY with valid JSON:
             if task.attempts < bigint(2):
                 task.status = "NEEDS_REVISION"
             else:
-                # Double failure slashing
                 task.status = "CLOSED"
                 total_refund = task.amount + task.worker_stake
                 task.amount = bigint(0)
@@ -292,7 +299,6 @@ Respond ONLY with valid JSON:
 
     @gl.public.write
     def finalize_payout(self, task_id: str) -> None:
-        """Disburses escrow funds strictly after 24h cooling-off without active disputes."""
         if task_id not in self.tasks:
             raise UserError("Task not found")
         task = self.tasks[task_id]
@@ -309,17 +315,17 @@ Respond ONLY with valid JSON:
 
         reward = task.amount
         stake = task.worker_stake
+        worker_addr = task.worker
         task.status = "CLOSED"
         task.amount = bigint(0)
         task.worker_stake = bigint(0)
 
-        # Release reward + stake to worker
-        gl.get_contract_at(Address(task.worker)).emit_transfer(value=u256(reward + stake))
+        gl.get_contract_at(Address(worker_addr)).emit_transfer(value=u256(reward + stake))
 
-        # Update reputation if configured
-        if self.reputation_contract != "0x0000000000000000000000000000000000000000":
+        # Safe cross-contract invocation passing string worker address
+        if self.reputation_contract and len(self.reputation_contract) == 42:
             try:
-                gl.get_contract_at(Address(self.reputation_contract)).update_reputation(Address(task.worker), True)
+                gl.get_contract_at(Address(self.reputation_contract)).update_reputation(worker_addr, True)
             except Exception:
                 pass
 
@@ -327,7 +333,6 @@ Respond ONLY with valid JSON:
 
     @gl.public.write
     def recover_stuck_funds(self, task_id: str) -> None:
-        """Reclaims locked client funds if task remains unaccepted or worker misses deadline."""
         if task_id not in self.tasks:
             raise UserError("Task not found")
         task = self.tasks[task_id]
@@ -357,7 +362,6 @@ Respond ONLY with valid JSON:
 
     @gl.public.view
     def get_all_tasks(self) -> str:
-        """Authoritative public view for frontend synchronization."""
         try:
             ids = json.loads(self.task_ids_json)
         except Exception:
@@ -372,6 +376,7 @@ Respond ONLY with valid JSON:
                     "worker": t.worker,
                     "title": t.title,
                     "criteria_url": t.criteria_url,
+                    "criteria_hash": getattr(t, "criteria_hash", ""),
                     "deliverable_url": t.deliverable_url,
                     "amount": str(t.amount),
                     "worker_stake": str(t.worker_stake),

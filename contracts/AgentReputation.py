@@ -13,9 +13,9 @@ class Contract(gl.Contract):
 
     def __init__(self):
         try:
-            self.platform_admin = str(gl.message.sender).lower()
+            self.platform_admin = str(gl.message.sender_address).lower()
         except Exception:
-            self.platform_admin = str(getattr(gl.message, "sender_address", "0x0000000000000000000000000000000000000000")).lower()
+            self.platform_admin = str(getattr(gl.message, "sender", "0x0000000000000000000000000000000000000000")).lower()
         self.authorized_court = self.platform_admin
         self.agent_list_json = "[]"
         self.scores = TreeMap()
@@ -25,9 +25,9 @@ class Contract(gl.Contract):
 
     def _get_caller(self) -> str:
         try:
-            return str(gl.message.sender).lower()
+            return str(gl.message.sender_address).lower()
         except Exception:
-            return str(getattr(gl.message, "sender_address", "0x0000000000000000000000000000000000000000")).lower()
+            return str(getattr(gl.message, "sender", "0x0000000000000000000000000000000000000000")).lower()
 
     @gl.public.write
     def set_authorized_court(self, court_address: str) -> None:
@@ -38,9 +38,6 @@ class Contract(gl.Contract):
 
     @gl.public.write
     def update_reputation(self, agent: str, is_success: bool) -> None:
-        """
-        Called by authorized AgentEscrowCourt contract upon finalized adjudication.
-        """
         caller = self._get_caller()
         if caller != self.authorized_court and caller != self.platform_admin:
             raise UserError("Unauthorized caller")
@@ -58,7 +55,6 @@ class Contract(gl.Contract):
             succ = u256(0)
             fail = u256(0)
             
-            # Register new agent in JSON list
             try:
                 agents = json.loads(self.agent_list_json)
             except Exception:
@@ -87,23 +83,7 @@ class Contract(gl.Contract):
         return u256(100)
 
     @gl.public.view
-    def get_agent_stats(self, agent: str) -> dict:
-        agent_key = str(agent).lower().strip()
-        score = self.scores[agent_key] if agent_key in self.scores else u256(100)
-        tot = self.total_tasks[agent_key] if agent_key in self.total_tasks else u256(0)
-        succ = self.successful_tasks[agent_key] if agent_key in self.successful_tasks else u256(0)
-        fail = self.failed_tasks[agent_key] if agent_key in self.failed_tasks else u256(0)
-        return {
-            "agent": agent_key,
-            "score": str(score),
-            "total_tasks": str(tot),
-            "successful_tasks": str(succ),
-            "failed_tasks": str(fail)
-        }
-
-    @gl.public.view
     def get_all_reputations(self) -> str:
-        """Authoritative public view for frontend leaderboard synchronization."""
         try:
             agents = json.loads(self.agent_list_json)
         except Exception:
