@@ -34,12 +34,18 @@ class Contract(gl.Contract):
         if gl.message.sender != self.authorized_court and gl.message.sender != self.platform_admin:
             raise UserError("Unauthorized caller")
 
-        current_score = self.scores.get(agent, u256(100))
-        tot = self.total_tasks.get(agent, u256(0))
-        succ = self.successful_tasks.get(agent, u256(0))
-        fail = self.failed_tasks.get(agent, u256(0))
+        if agent in self.scores:
+            current_score = self.scores[agent]
+            tot = self.total_tasks[agent]
+            succ = self.successful_tasks[agent]
+            fail = self.failed_tasks[agent]
+        else:
+            current_score = u256(100)
+            tot = u256(0)
+            succ = u256(0)
+            fail = u256(0)
 
-        if tot == u256(0) and agent not in self.agent_list:
+        if tot == u256(0):
             self.agent_list.append(agent)
 
         self.total_tasks[agent] = tot + u256(1)
@@ -56,16 +62,22 @@ class Contract(gl.Contract):
 
     @gl.public.view
     def get_reputation(self, agent: Address) -> u256:
-        return self.scores.get(agent, u256(100))
+        if agent in self.scores:
+            return self.scores[agent]
+        return u256(100)
 
     @gl.public.view
     def get_agent_stats(self, agent: Address) -> dict:
+        score = self.scores[agent] if agent in self.scores else u256(100)
+        tot = self.total_tasks[agent] if agent in self.total_tasks else u256(0)
+        succ = self.successful_tasks[agent] if agent in self.successful_tasks else u256(0)
+        fail = self.failed_tasks[agent] if agent in self.failed_tasks else u256(0)
         return {
             "agent": str(agent),
-            "score": str(self.scores.get(agent, u256(100))),
-            "total_tasks": str(self.total_tasks.get(agent, u256(0))),
-            "successful_tasks": str(self.successful_tasks.get(agent, u256(0))),
-            "failed_tasks": str(self.failed_tasks.get(agent, u256(0)))
+            "score": str(score),
+            "total_tasks": str(tot),
+            "successful_tasks": str(succ),
+            "failed_tasks": str(fail)
         }
 
     @gl.public.view
@@ -73,11 +85,15 @@ class Contract(gl.Contract):
         """Authoritative public view for frontend leaderboard synchronization."""
         res = []
         for a in self.agent_list:
+            score = self.scores[a] if a in self.scores else u256(100)
+            tot = self.total_tasks[a] if a in self.total_tasks else u256(0)
+            succ = self.successful_tasks[a] if a in self.successful_tasks else u256(0)
+            fail = self.failed_tasks[a] if a in self.failed_tasks else u256(0)
             res.append({
                 "agent": str(a),
-                "score": str(self.scores.get(a, u256(100))),
-                "total_tasks": str(self.total_tasks.get(a, u256(0))),
-                "successful_tasks": str(self.successful_tasks.get(a, u256(0))),
-                "failed_tasks": str(self.failed_tasks.get(a, u256(0)))
+                "score": str(score),
+                "total_tasks": str(tot),
+                "successful_tasks": str(succ),
+                "failed_tasks": str(fail)
             })
         return json.dumps(res)
