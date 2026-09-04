@@ -9,7 +9,7 @@ import os
 
 def main():
     print("=== GenLayer AgentEscrowCourt Deployer ===")
-    print("Mạng triển khai target: studionet (https://studio.genlayer.com)")
+    print("Target deployment network: studionet (https://studio.genlayer.com)")
     print("1. Deploy AgentReputation.py...")
     print("2. Deploy AgentEscrowCourt.py...")
     print("3. Call set_reputation_contract & set_authorized_court...")

@@ -13,17 +13,11 @@ import {
   Clock,
   Trophy,
   Activity,
-  Zap,
   HelpCircle,
   ChevronDown,
   ChevronUp,
   Terminal,
-  Code2,
-  Check,
-  Layers,
   Sparkles,
-  Users,
-  Database,
   Lock
 } from 'lucide-react';
 
@@ -266,20 +260,20 @@ export default function App() {
 
   const faqs = [
     {
-      q: "Tại sao AgentEscrowCourt cần có GenLayer?",
-      a: "Smart contract truyền thống (Solidity) chỉ xử lý được các phép tính toán xác định. Khi 2 AI Agent giao dịch một công việc off-chain (vd: audit code, viết báo cáo), Solidity hoàn toàn không thể nghiệm thu xem công việc đó có đạt yêu cầu hay không. GenLayer tích hợp LLM ngay tầng đồng thuận, giúp bồi thẩm đoàn AI Validator tự đọc web và phán quyết công bằng."
+      q: "Why does AgentEscrowCourt require GenLayer?",
+      a: "Traditional Solidity smart contracts can only execute deterministic math. When autonomous AI Agents enter an agreement for off-chain work (e.g., code audits, research reports), Solidity cannot verify whether the deliverable satisfies subjective criteria. GenLayer embeds LLMs directly into the consensus layer, enabling a decentralized AI Validator Jury to evaluate deliverables fair and trustlessly."
     },
     {
-      q: "Cơ chế Optimistic Democracy & Semantic Consensus là gì?",
-      a: "Mỗi validator chạy một model LLM khác nhau. Khi chạy block non-deterministic, thay vì bắt buộc hai LLM trả về cùng từng ký tự văn bản lý do (gây rớt đồng thuận), GenLayer sử dụng wrapper gl.vm.run_nondet để so sánh duy nhất VERDICT ('RELEASE' vs 'REFUND') — chắt lọc đúng ý nghĩa cốt lõi của phán quyết."
+      q: "What is Optimistic Democracy & Semantic Consensus?",
+      a: "Each validator runs a distinct LLM model. For non-deterministic execution, instead of forcing exact character-by-character text matches on freeform reasoning (which causes consensus failure), GenLayer uses gl.vm.run_nondet to compare only the semantic VERDICT ('RELEASE' vs 'REFUND')."
     },
     {
-      q: "Mạng Studionet khác gì so với Testnet?",
-      a: "Studionet là mạng hosted chính thức trên GenLayer Studio (https://studio.genlayer.com). Tiền GEN và Hợp đồng trên Studionet độc lập hoàn toàn với Testnet (Asimov/Bradbury). Tất cả giao dịch ký bằng MetaMask trên Studionet với Chain ID 61999."
+      q: "How does Studionet differ from Testnet?",
+      a: "Studionet is the official hosted environment on GenLayer Studio (https://studio.genlayer.com). Studionet contracts and balances (Chain ID 61999) operate independently from public testnet."
     },
     {
-      q: "Điểm uy tín Agent (Reputation Score) hoạt động ra sao?",
-      a: "Mỗi khi công việc hoàn thành thành công và được AI phán quyết RELEASE, Hợp đồng AgentEscrowCourt tự động gọi chéo sang AgentReputation.py để cộng +10 điểm uy tín cho Worker. Ngược lại nếu vi phạm sẽ trừ -20 điểm."
+      q: "How does the Agent Reputation Score work?",
+      a: "Upon successful job completion (VERDICT: RELEASE), AgentEscrowCourt calls AgentReputation.py via cross-contract execution to award +10 reputation points to the worker agent. Violations result in a -20 point penalty."
     }
   ];
 
@@ -332,7 +326,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* SECTION 2: ĐẦU BÀI - HERO BANNER & PROTOCOL METRICS */}
+        {/* SECTION 2: HERO BANNER & PROTOCOL METRICS */}
         <section className="bg-gradient-to-b from-purple-950/40 via-slate-950 to-slate-950 border-b border-slate-900 pt-10 pb-8 px-4">
           <div className="max-w-7xl mx-auto">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
@@ -343,10 +337,10 @@ export default function App() {
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" /> GenLayer Agent Tank & Builder Program Pitch Project
                 </div>
                 <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
-                  Tòa Án Phân Xử Ký Quỹ Phi Tập Trung Cho <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">AI Agent</span>
+                  Decentralized AI Escrow Court for <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">Autonomous AI Agents</span>
                 </h2>
                 <p className="text-slate-300 text-sm leading-relaxed">
-                  Giải pháp ký quỹ tự động giữa các AI Agent với sự đồng thuận bồi thẩm đoàn AI Validator. Đọc trực tiếp sản phẩm off-chain, đánh giá chủ quan bằng LLM và tự động giải ngân mà không cần con người.
+                  Automated escrow protocol between autonomous AI Agents powered by GenLayer's LLM consensus jury. Renders off-chain deliverables, adjudicates subjective criteria with AI, and releases funds trustlessly.
                 </p>
 
                 {/* Solidity vs GenLayer Feature Comparison Badge */}
@@ -355,14 +349,14 @@ export default function App() {
                     <div className="flex items-center gap-1.5 font-bold text-rose-400 mb-1">
                       <XCircle className="w-4 h-4" /> Solidity Smart Contract
                     </div>
-                    <p className="text-slate-400 text-[11px]">Chỉ tính toán số liệu xác định. Bất lực trước kết quả chủ quan & dữ liệu web.</p>
+                    <p className="text-slate-400 text-[11px]">Deterministic math only. Powerless against subjective deliverables & off-chain Web2 content.</p>
                   </div>
 
                   <div className="p-3 rounded-xl bg-purple-950/60 border border-purple-500/40 text-xs">
                     <div className="flex items-center gap-1.5 font-bold text-emerald-400 mb-1">
                       <CheckCircle2 className="w-4 h-4" /> GenLayer Intelligent Contract
                     </div>
-                    <p className="text-purple-200 text-[11px]">Bồi thẩm đoàn AI Validator tự đọc Web2, suy luận LLM & đồng thuận ý nghĩa phán quyết.</p>
+                    <p className="text-purple-200 text-[11px]">LLM Validator Jury renders Web2 content, reasons subjectively, and agrees on semantic verdicts.</p>
                   </div>
                 </div>
               </div>
@@ -447,7 +441,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* SECTION 3: THÂN BÀI - MULTI-TAB DASHBOARD CONTENT */}
+        {/* SECTION 3: MULTI-TAB DASHBOARD CONTENT */}
         <main className="max-w-7xl mx-auto px-4 my-8">
 
           {/* TAB 1: ESCROW MARKETPLACE */}
@@ -582,7 +576,7 @@ export default function App() {
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
                       <Trophy className="w-5 h-5 text-amber-400" /> AI Agent Reputation Leaderboard
                     </h3>
-                    <p className="text-xs text-slate-400 mt-1">Được cập nhật tự động từ hợp đồng thông minh AgentReputation.py trên studionet</p>
+                    <p className="text-xs text-slate-400 mt-1">Auto-synced from AgentReputation.py intelligent contract on GenLayer Studionet</p>
                   </div>
                   <span className="px-3 py-1 bg-purple-900/30 border border-purple-500/30 text-purple-300 text-xs font-mono rounded-full">
                     On-chain Storage: TreeMap[str, u256]
@@ -699,7 +693,7 @@ export default function App() {
                       onChange={e => setCriteriaUrl(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-purple-500"
                     />
-                    <p className="text-[10px] text-slate-500 mt-1">Được đọc trực tiếp on-chain bởi các LLM Validator của GenLayer.</p>
+                    <p className="text-[10px] text-slate-500 mt-1">Directly rendered on-chain by GenLayer's LLM Validator network.</p>
                   </div>
 
                   <div>
@@ -739,13 +733,13 @@ export default function App() {
 
         </main>
 
-        {/* SECTION 4: KẾT BÀI - INTERACTIVE FAQ & ENTERPRISE FOOTER */}
+        {/* SECTION 4: INTERACTIVE FAQ & ENTERPRISE FOOTER */}
         <section className="bg-slate-900/60 border-t border-slate-800 py-12 px-4 mt-12">
           <div className="max-w-4xl mx-auto">
             <h3 className="text-xl font-extrabold text-center text-white mb-2 flex items-center justify-center gap-2">
               <HelpCircle className="w-5 h-5 text-purple-400" /> Frequently Asked Questions (FAQ)
             </h3>
-            <p className="text-xs text-slate-400 text-center mb-8">Giải đáp các thắc mắc kỹ thuật về GenLayer Studionet & AgentEscrowCourt</p>
+            <p className="text-xs text-slate-400 text-center mb-8">Technical details about GenLayer Studionet & AgentEscrowCourt</p>
 
             <div className="space-y-3">
               {faqs.map((faq, index) => (
