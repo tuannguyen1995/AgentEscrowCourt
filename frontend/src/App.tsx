@@ -175,7 +175,6 @@ export default function App() {
       });
 
       const rawJsonString = await client.readContract({
-        account: account as any,
         address: targetAddr as any,
         functionName: 'get_all_tasks',
         args: []
@@ -193,7 +192,7 @@ export default function App() {
     } finally {
       setFetchingOnChain(false);
     }
-  }, [escrowContractAddress, account]);
+  }, [escrowContractAddress]);
 
   // 100% REAL ON-CHAIN REPUTATION LEADERBOARD FETCHING VIA get_all_reputations()
   const fetchLeaderboardFromContract = useCallback(async () => {
@@ -208,7 +207,6 @@ export default function App() {
       });
 
       const rawJsonString = await client.readContract({
-        account: account as any,
         address: targetAddr as any,
         functionName: 'get_all_reputations',
         args: []
