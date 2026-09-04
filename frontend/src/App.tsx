@@ -247,31 +247,36 @@ export default function App() {
   const parseOnChainResult = <T,>(raw: any): T[] => {
     if (!raw) return [];
     if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'object' && raw !== null) {
+      if (Array.isArray(raw.result)) return raw.result;
+      if (typeof raw.result === 'string') raw = raw.result;
+    }
     if (typeof raw === 'string') {
-      const trimmed = raw.trim();
-      if (!trimmed || trimmed === '0x' || trimmed === '[]') return [];
+      let str = raw.trim();
+      if (!str || str === '0x' || str === '[]') return [];
 
-      // 1. Direct JSON parse
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) return parsed;
-      } catch (_) {}
-
-      // 2. Decode hex string if starts with 0x
-      if (trimmed.startsWith('0x')) {
+      // 1. If hex encoded (starts with 0x)
+      if (str.startsWith('0x')) {
         try {
-          const hex = trimmed.slice(2);
-          let str = '';
-          for (let i = 0; i < hex.length; i += 2) {
-            const code = parseInt(hex.substring(i, i + 2), 16);
-            if (code >= 32 && code <= 126) str += String.fromCharCode(code);
-          }
-          const cleanStr = str.trim();
-          if (cleanStr.startsWith('[') && cleanStr.endsWith(']')) {
-            const parsed = JSON.parse(cleanStr);
-            if (Array.isArray(parsed)) return parsed;
-          }
-        } catch (_) {}
+          const hex = str.slice(2);
+          const bytes = new Uint8Array(hex.match(/.{1,2}/g)?.map(b => parseInt(b, 16)) || []);
+          str = new TextDecoder().decode(bytes).trim();
+        } catch (e) {
+          console.error("Failed to decode hex bytes:", e);
+        }
+      }
+
+      // 2. Try JSON parsing (handles nested JSON strings if double encoded)
+      try {
+        let parsed = JSON.parse(str);
+        if (typeof parsed === 'string') {
+          try {
+            parsed = JSON.parse(parsed);
+          } catch (_) {}
+        }
+        if (Array.isArray(parsed)) return parsed;
+      } catch (err) {
+        console.error("Failed to parse JSON on-chain result:", err, "raw:", str);
       }
     }
     return [];
@@ -395,9 +400,9 @@ export default function App() {
       );
 
       await fetchTasksFromContract();
-      setTimeout(() => {
-        fetchTasksFromContract();
-      }, 3500);
+      setTimeout(() => fetchTasksFromContract(), 1500);
+      setTimeout(() => fetchTasksFromContract(), 3500);
+      setTimeout(() => fetchTasksFromContract(), 6000);
 
       setTaskIdInput('');
       setTitle('');
