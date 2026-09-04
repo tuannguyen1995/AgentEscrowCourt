@@ -357,6 +357,9 @@ export default function App() {
       });
 
       await fetchTasksFromContract();
+      setTimeout(() => {
+        fetchTasksFromContract();
+      }, 3500);
 
       setTaskIdInput('');
       setTitle('');
