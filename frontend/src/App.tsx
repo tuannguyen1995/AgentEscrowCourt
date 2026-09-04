@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { createClient } from 'genlayer-js';
+import { createClient, createAccount, generatePrivateKey } from 'genlayer-js';
 import {
   ShieldCheck,
   Cpu,
@@ -123,39 +123,55 @@ export default function App() {
     localStorage.setItem('reputation_contract_addr', repAddr);
   };
 
+  const getOrCreateGenLayerAccount = useCallback(() => {
+    let pk = localStorage.getItem('genlayer_pk') as `0x${string}` | null;
+    if (!pk || !pk.startsWith('0x') || pk.length !== 66) {
+      pk = generatePrivateKey();
+      localStorage.setItem('genlayer_pk', pk);
+    }
+    return createAccount(pk);
+  }, []);
+
   // Connect wallet
   const connectWallet = async () => {
-    if (typeof window.ethereum === 'undefined') {
-      alert('MetaMask is not installed. Please install MetaMask to interact with GenLayer Studionet.');
-      return;
-    }
     try {
       setLoading(true);
       setTxError(null);
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      const userAddr = accounts[0];
-      setAccount(userAddr.toLowerCase());
+      
+      const genlayerAcc = getOrCreateGenLayerAccount();
+      let userAddr = genlayerAcc.address.toLowerCase();
 
-      const CHAIN_ID_HEX = "0x" + STUDIONET_CONFIG.id.toString(16);
-      try {
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: CHAIN_ID_HEX }],
-        });
-      } catch (switchError: any) {
-        if (switchError.code === 4902 || switchError.code === -32603) {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: CHAIN_ID_HEX,
-              chainName: STUDIONET_CONFIG.name,
-              nativeCurrency: STUDIONET_CONFIG.nativeCurrency,
-              rpcUrls: STUDIONET_CONFIG.rpcUrls.default.http,
-              blockExplorerUrls: STUDIONET_CONFIG.blockExplorerUrls,
-            }],
-          });
-        }
+      if (typeof window.ethereum !== 'undefined') {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          if (accounts && accounts[0]) {
+            userAddr = accounts[0].toLowerCase();
+          }
+
+          const CHAIN_ID_HEX = "0x" + STUDIONET_CONFIG.id.toString(16);
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: CHAIN_ID_HEX }],
+            });
+          } catch (switchError: any) {
+            if (switchError.code === 4902 || switchError.code === -32603) {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: CHAIN_ID_HEX,
+                  chainName: STUDIONET_CONFIG.name,
+                  nativeCurrency: STUDIONET_CONFIG.nativeCurrency,
+                  rpcUrls: STUDIONET_CONFIG.rpcUrls.default.http,
+                  blockExplorerUrls: STUDIONET_CONFIG.blockExplorerUrls,
+                }],
+              });
+            }
+          }
+        } catch (_) {}
       }
+
+      setAccount(userAddr);
     } catch (err: any) {
       console.error(err);
       setTxError(err.message || "Failed to connect wallet.");
@@ -283,16 +299,17 @@ export default function App() {
     setStepMessage("Submitting create_escrow transaction to GenLayer Studionet...");
 
     try {
+      const genlayerAcc = getOrCreateGenLayerAccount();
       const client = createClient({
         chain: STUDIONET_CONFIG as any,
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0],
-        account: account as any
+        account: genlayerAcc
       });
 
       const weiAmount = BigInt(Math.floor(parseFloat(amount) * 1e18));
 
       await client.writeContract({
-        account: account as any,
+        account: genlayerAcc,
         address: escrowContractAddress as any,
         functionName: 'create_escrow',
         args: [tid, title, criteriaUrl, criteriaHash || "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", parseInt(deadlineHours || '72', 10)],
@@ -326,16 +343,17 @@ export default function App() {
     setStepMessage(`Locking 15% collateral stake to claim Escrow #${task.id}...`);
 
     try {
+      const genlayerAcc = getOrCreateGenLayerAccount();
       const client = createClient({
         chain: STUDIONET_CONFIG as any,
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0],
-        account: account as any
+        account: genlayerAcc
       });
 
       const minStakeWei = (BigInt(task.amount) * BigInt(15)) / BigInt(100);
 
       await client.writeContract({
-        account: account as any,
+        account: genlayerAcc,
         address: escrowContractAddress as any,
         functionName: 'accept_task',
         args: [task.id],
@@ -368,14 +386,15 @@ export default function App() {
     setStepMessage(`Submitting deliverable & executing gl.nondet.web.render LLM Jury evaluation...`);
 
     try {
+      const genlayerAcc = getOrCreateGenLayerAccount();
       const client = createClient({
         chain: STUDIONET_CONFIG as any,
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0],
-        account: account as any
+        account: genlayerAcc
       });
 
       await client.writeContract({
-        account: account as any,
+        account: genlayerAcc,
         address: escrowContractAddress as any,
         functionName: 'submit_deliverable',
         args: [taskId, deliverableUrlInput],
@@ -404,14 +423,15 @@ export default function App() {
     setStepMessage(`Raising dispute for Escrow #${taskId}...`);
 
     try {
+      const genlayerAcc = getOrCreateGenLayerAccount();
       const client = createClient({
         chain: STUDIONET_CONFIG as any,
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0],
-        account: account as any
+        account: genlayerAcc
       });
 
       await client.writeContract({
-        account: account as any,
+        account: genlayerAcc,
         address: escrowContractAddress as any,
         functionName: 'raise_dispute',
         args: [taskId, disputeReasonInput || "Disputed within 24h cooling off"],
@@ -439,14 +459,15 @@ export default function App() {
     setStepMessage(`Finalizing payout for Escrow #${taskId}...`);
 
     try {
+      const genlayerAcc = getOrCreateGenLayerAccount();
       const client = createClient({
         chain: STUDIONET_CONFIG as any,
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0],
-        account: account as any
+        account: genlayerAcc
       });
 
       await client.writeContract({
-        account: account as any,
+        account: genlayerAcc,
         address: escrowContractAddress as any,
         functionName: 'finalize_payout',
         args: [taskId],
@@ -473,14 +494,15 @@ export default function App() {
     setStepMessage(`Recovering stuck funds for Escrow #${taskId}...`);
 
     try {
+      const genlayerAcc = getOrCreateGenLayerAccount();
       const client = createClient({
         chain: STUDIONET_CONFIG as any,
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0],
-        account: account as any
+        account: genlayerAcc
       });
 
       await client.writeContract({
-        account: account as any,
+        account: genlayerAcc,
         address: escrowContractAddress as any,
         functionName: 'recover_stuck_funds',
         args: [taskId],
