@@ -1,3 +1,4 @@
+# v0.2.18
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 from genlayer import *
 from dataclasses import dataclass
@@ -6,257 +7,369 @@ import json
 @allow_storage
 @dataclass
 class EscrowTask:
-    id: u256
-    client: Address
-    worker: Address
+    id: str
+    client: str
+    worker: str
     title: str
     criteria_url: str
     deliverable_url: str
     amount: bigint
-    status: u8  # 0: CREATED, 1: SUBMITTED, 2: RELEASED, 3: REFUNDED, 4: RETRY
-    attempts: u256  # Track submission attempts (Max 3)
+    worker_stake: bigint
+    status: str            # OPEN, IN_PROGRESS, AWAITING_PAYOUT, NEEDS_REVISION, DISPUTED, ESCALATED, CLOSED
+    attempts: bigint
+    verdict: str           # RELEASE, REFUND, RETRY, ESCALATE
     verdict_reason: str
+    confidence: bigint
+    payout_ready_at: bigint
+    deadline: bigint
 
 class Contract(gl.Contract):
+    platform_admin: str
+    reputation_contract: str
     tasks: TreeMap[str, EscrowTask]
-    task_count: u256
-    reputation_contract: Address
-    owner: Address
+    task_ids: DynArray[str]
 
     def __init__(self):
-        self.owner = gl.message.sender
-        self.task_count = u256(0)
+        try:
+            self.platform_admin = str(gl.message.sender).lower()
+        except Exception:
+            self.platform_admin = str(getattr(gl.message, "sender_address", "0x0000000000000000000000000000000000000000")).lower()
+        self.reputation_contract = "0x0000000000000000000000000000000000000000"
+
+    def _get_caller(self) -> str:
+        try:
+            return str(gl.message.sender).lower()
+        except Exception:
+            return str(getattr(gl.message, "sender_address", "0x0000000000000000000000000000000000000000")).lower()
+
+    def _get_current_timestamp(self) -> bigint:
+        """Derive trusted execution timestamp strictly from transaction context."""
+        try:
+            dt_raw = gl.message_raw.get("datetime", None) if isinstance(gl.message_raw, dict) else None
+            if dt_raw:
+                from datetime import datetime
+                dt = datetime.fromisoformat(str(dt_raw).replace("Z", "+00:00"))
+                ts = int(dt.timestamp())
+                if ts > 0:
+                    return bigint(ts)
+        except Exception:
+            pass
+        # Fallback to standard execution timestamp if context is omitted
+        import time
+        return bigint(int(time.time()))
+
+    def _parse_llm_json(self, response_str: str) -> dict:
+        if isinstance(response_str, dict):
+            return response_str
+        if hasattr(response_str, "__dict__"):
+            return response_str.__dict__
+        t = str(response_str).strip()
+        if t.startswith("```json"):
+            t = t[7:]
+        elif t.startswith("```"):
+            t = t[3:]
+        if t.endswith("```"):
+            t = t[:-3]
+        try:
+            return json.loads(t.strip())
+        except Exception as e:
+            return {"verdict": "ESCALATE", "confidence": 0, "reason": f"JSON parse failure: {str(e)}"}
+
+    def _effective_verdict(self, data: dict) -> str:
+        verdict = str(data.get("verdict", "ESCALATE")).upper().strip()
+        if verdict not in {"RELEASE", "REFUND", "RETRY", "ESCALATE"}:
+            verdict = "ESCALATE"
+        try:
+            conf = int(data.get("confidence", 0))
+        except Exception:
+            conf = 0
+        if conf < 65:
+            verdict = "ESCALATE"
+        return verdict
 
     @gl.public.write
-    def set_reputation_contract(self, rep_addr: Address) -> None:
-        if gl.message.sender != self.owner:
-            raise UserError("Only owner can set reputation contract")
-        self.reputation_contract = rep_addr
+    def set_reputation_contract(self, rep_addr: str) -> None:
+        caller = self._get_caller()
+        if caller != self.platform_admin:
+            raise UserError("Only platform admin can set reputation contract")
+        self.reputation_contract = rep_addr.lower().strip()
 
     @gl.public.write.payable
-    def create_escrow(self, title: str, criteria_url: str, worker: Address) -> u256:
-        if gl.message.value <= bigint(0):
-            raise UserError("Escrow amount must be greater than zero")
-        if len(title) == 0:
-            raise UserError("Title cannot be empty")
-        if len(criteria_url) == 0:
-            raise UserError("Criteria URL cannot be empty")
+    def create_escrow(self, task_id: str, title: str, criteria_url: str, deadline_hours: bigint = bigint(72)) -> None:
+        if task_id in self.tasks:
+            raise UserError(f"Task ID {task_id} already exists")
+        amount = gl.message.value
+        if amount <= bigint(0):
+            raise UserError("Escrow reward must be strictly greater than zero")
+        if not criteria_url.startswith("http"):
+            raise UserError("Valid specification HTTP/HTTPS URL required")
 
-        new_id = self.task_count + u256(1)
-        self.task_count = new_id
+        caller = self._get_caller()
+        dur = deadline_hours * bigint(3600) if deadline_hours > bigint(0) else bigint(259200)
 
-        task = EscrowTask(
-            id=new_id,
-            client=gl.message.sender,
-            worker=worker,
-            title=title,
-            criteria_url=criteria_url,
+        self.tasks[task_id] = EscrowTask(
+            id=task_id,
+            client=caller,
+            worker="0x0000000000000000000000000000000000000000",
+            title=title.strip(),
+            criteria_url=criteria_url.strip(),
             deliverable_url="",
-            amount=gl.message.value,
-            status=u8(0),
-            attempts=u256(0),
-            verdict_reason=""
+            amount=amount,
+            worker_stake=bigint(0),
+            status="OPEN",
+            attempts=bigint(0),
+            verdict="NONE",
+            verdict_reason="Awaiting worker acceptance and collateral lock",
+            confidence=bigint(0),
+            payout_ready_at=bigint(0),
+            deadline=self._get_current_timestamp() + dur
         )
+        self.task_ids.append(task_id)
 
-        self.tasks[str(new_id)] = task
-        return new_id
+    @gl.public.write.payable
+    def accept_task(self, task_id: str) -> None:
+        """Worker locks 15% collateral stake to claim the escrow task."""
+        if task_id not in self.tasks:
+            raise UserError("Task not found")
+        task = self.tasks[task_id]
+        if task.status != "OPEN":
+            raise UserError("Task is not in OPEN status")
 
-    @gl.public.write
-    def submit_deliverable(self, escrow_id: u256, deliverable_url: str) -> None:
-        id_str = str(escrow_id)
-        if id_str not in self.tasks:
-            raise UserError("Escrow task not found")
+        caller = self._get_caller()
+        if caller == task.client:
+            raise UserError("Client cannot accept their own task")
 
-        task = self.tasks[id_str]
-        if task.status not in [u8(0), u8(4)]: # CREATED or RETRY
-            raise UserError("Task is not in CREATED or RETRY state")
-        if gl.message.sender != task.worker and gl.message.sender != task.client:
-            raise UserError("Only assigned worker or client can submit deliverable")
-        if len(deliverable_url) == 0:
-            raise UserError("Deliverable URL cannot be empty")
+        min_stake = (task.amount * bigint(15)) // bigint(100)
+        if gl.message.value < min_stake or gl.message.value <= bigint(0):
+            raise UserError(f"Insufficient worker stake. Minimum 15% required ({min_stake})")
 
-        task.attempts = task.attempts + u256(1)
-        if task.attempts > u256(3):
-            raise UserError("Maximum 3 deliverable attempts reached for this task")
-
-        task.deliverable_url = deliverable_url
-        task.status = u8(1)  # SUBMITTED
-        self.tasks[id_str] = task
+        task.worker = caller
+        task.worker_stake = gl.message.value
+        task.status = "IN_PROGRESS"
+        self.tasks[task_id] = task
 
     @gl.public.write
-    def adjudicate(self, escrow_id: u256) -> str:
-        id_str = str(escrow_id)
-        if id_str not in self.tasks:
-            raise UserError("Escrow task not found")
+    def submit_deliverable(self, task_id: str, deliverable_url: str) -> None:
+        if task_id not in self.tasks:
+            raise UserError("Task not found")
+        task = self.tasks[task_id]
+        caller = self._get_caller()
 
-        task = self.tasks[id_str]
-        if task.status != u8(1):
-            raise UserError("Task is not in SUBMITTED state")
+        if caller != task.worker:
+            raise UserError("Only assigned worker can submit deliverable")
+        if task.status not in ["IN_PROGRESS", "NEEDS_REVISION"]:
+            raise UserError("Task is not ready for submission")
+        if not deliverable_url.startswith("http"):
+            raise UserError("Valid deliverable HTTP/HTTPS URL required")
 
-        # Extract state variables BEFORE non-deterministic closure
-        criteria_url = task.criteria_url
-        deliverable_url = task.deliverable_url
+        task.attempts += bigint(1)
+        if task.attempts > bigint(3):
+            raise UserError("Maximum 3 submission attempts exceeded")
+
+        task.deliverable_url = deliverable_url.strip()
+
+        criteria_str = task.criteria_url
+        deliverable_str = task.deliverable_url
         task_title = task.title
-        amount = task.amount
-        client = task.client
-        worker = task.worker
-        current_attempt = task.attempts
+        attempt_num = str(task.attempts)
 
-        # 🔒 Dynamic Canary Token Defense against Prompt Injection (from DeliverableCourt/GrantAuditor)
-        import hashlib
-        canary_token = hashlib.sha256(f"court_{id_str}_{_addr_to_str(worker)}_{str(current_attempt)}".encode()).hexdigest()[:16]
-
-        def is_unusable_render(text: str) -> bool:
-            if not text or not text.strip():
-                return True
-            low = text.lower()
-            error_keywords = [
-                "404 not found", "error 404", "fetch failure", "network error",
-                "unable to render", "connection refused", "500 internal server error"
-            ]
-            for kw in error_keywords:
-                if kw in low:
-                    return True
-            return False
-
-        def leader_fn():
-            # 1. Multi-source evidence cross-referencing
+        def leader_fn() -> dict:
             try:
-                criteria_content = gl.nondet.web.render(criteria_url, mode="text")
+                c_res = gl.nondet.web.render(criteria_str, mode="text")
+                c_text = str(c_res)
+                if any(err in c_text[:400].lower() for err in ["404 not found", "error 404"]):
+                    return {"verdict": "ESCALATE", "confidence": 100, "reason": "Criteria spec endpoint is 404; escrow locked."}
             except Exception as e:
-                criteria_content = f"Criteria fetch error: {str(e)}"
+                return {"verdict": "ESCALATE", "confidence": 100, "reason": f"Criteria fetch failed: {str(e)}"}
 
-            evidence_blocks = []
-            for url in deliverable_url.split(","):
-                clean_url = url.strip()
-                if not clean_url:
-                    continue
-                try:
-                    res = gl.nondet.web.render(clean_url, mode="text")
-                    if is_unusable_render(res[:400]):
-                        evidence_blocks.append(f"Source ({clean_url}): [Warning: Unusable or error response rendered]")
-                    else:
-                        evidence_blocks.append(f"Source ({clean_url}):\n{res[:1500]}")
-                except Exception as e:
-                    evidence_blocks.append(f"Source ({clean_url}): Render error {str(e)}")
+            try:
+                d_res = gl.nondet.web.render(deliverable_str, mode="text")
+                d_text = str(d_res)
+                if any(err in d_text[:400].lower() for err in ["404 not found", "error 404"]):
+                    return {"verdict": "REFUND", "confidence": 100, "reason": "Deliverable endpoint is 404 or empty."}
+            except Exception as e:
+                return {"verdict": "REFUND", "confidence": 100, "reason": f"Deliverable fetch failed: {str(e)}"}
 
-            combined_deliverables = "\n\n---\n\n".join(evidence_blocks) if evidence_blocks else "No deliverable content rendered."
-
-            # 2. LLM evaluation prompt with Canary Token protection
-            prompt = f"""You are an impartial decentralized AI Judge on GenLayer evaluating an Escrow deliverable.
+            # Untruncated full evidence ingestion
+            prompt = f"""You are an impartial decentralized AI Court Judge on GenLayer evaluating an Escrow deliverable.
 Task Title: {task_title}
-Attempt: {str(current_attempt)} / 3
-Canary Security Token: {canary_token}
+Attempt: {attempt_num} / 3
 
-Criteria Spec ({criteria_url}):
-{criteria_content[:1500]}
+CRITERIA SPECIFICATION (FULL EVIDENCE):
+{c_text}
 
-Deliverable Submission ({deliverable_url}):
-{combined_deliverables}
+SUBMITTED DELIVERABLE (FULL EVIDENCE):
+{d_text}
 
-Instructions:
-Evaluate if the submitted deliverable satisfies the task criteria.
-Valid Verdict Options:
-- "RELEASE": Work fully meets criteria. Release funds to worker.
-- "REFUND": Work fundamentally fails or is malicious. Refund client.
-- "RETRY": Work is partially complete or has minor fixable issues (only if attempt < 3).
+DECISION FRAMEWORK:
+- "RELEASE": Work fully satisfies the specifications. Escrow payout approved.
+- "REFUND": Work is completely missing, plagiarized, or fails critical requirements.
+- "RETRY": Work is partially complete with minor fixable flaws (only if attempt < 3).
+- "ESCALATE": Content is ambiguous, contradictory, or requires human arbitration.
 
-Respond ONLY in valid JSON format:
-{{
-  "verdict": "RELEASE" or "REFUND" or "RETRY",
-  "confidence": 0-100,
-  "reason": "Detailed step-by-step evaluation explanation."
-}}"""
+Respond ONLY with valid JSON:
+{{"verdict": "RELEASE|REFUND|RETRY|ESCALATE", "confidence": 0-100, "reason": "Detailed step-by-step evaluation trace."}}"""
 
             res = gl.nondet.exec_prompt(prompt, response_format="json")
-            return res
+            if isinstance(res, dict):
+                return res
+            return self._parse_llm_json(str(res))
 
         def validator_fn(leader_res) -> bool:
             if not isinstance(leader_res, gl.vm.Return):
                 return False
-            leader_data = leader_res.calldata
-            if not isinstance(leader_data, dict) or "verdict" not in leader_data:
-                return False
+            leader_data = leader_res.calldata if hasattr(leader_res, "calldata") else leader_res
+            if not isinstance(leader_data, dict):
+                leader_data = self._parse_llm_json(str(leader_data))
+            mine_data = leader_fn()
+            return self._effective_verdict(leader_data) == self._effective_verdict(mine_data)
 
-            mine = leader_fn()
-            if not isinstance(mine, dict) or "verdict" not in mine:
-                return False
-
-            # Semantic Consensus Check: Compare ONLY the verdict ("RELEASE", "REFUND", "RETRY")
-            return mine["verdict"] == leader_data["verdict"]
-
-        # Run non-deterministic consensus across validators
         result = gl.vm.run_nondet(leader_fn, validator_fn)
+        if not isinstance(result, dict):
+            result = self._parse_llm_json(str(result))
 
-        verdict = str(result.get("verdict", "REFUND")).upper()
+        final_verdict = self._effective_verdict(result)
+        try:
+            conf = int(result.get("confidence", 0))
+        except Exception:
+            conf = 0
         reason = str(result.get("reason", "AI Adjudication completed"))
-        confidence = int(result.get("confidence", 80))
 
-        if confidence < 50:
-            raise UserError(f"AI Adjudication confidence too low ({confidence}%). Manual escalation required.")
+        if conf < 65:
+            reason = f"[Confidence {conf}% < 65%] " + reason
 
-        if verdict == "RELEASE":
-            # Release funds to worker
-            gl.get_contract_at(worker).emit_transfer(value=amount)
-            task.status = u8(2)  # RELEASED
-            task.verdict_reason = f"VERDICT: RELEASED | Reason: {reason}"
-            self.tasks[id_str] = task
+        task.verdict = final_verdict
+        task.verdict_reason = reason
+        task.confidence = bigint(conf)
 
-            if _addr_to_str(self.reputation_contract) != "0x0000000000000000000000000000000000000000":
-                try:
-                    gl.get_contract_at(self.reputation_contract).update_reputation(worker, True)
-                except Exception:
-                    pass
-            return "RELEASE"
-
-        elif verdict == "RETRY" and current_attempt < u256(3):
-            # Allow worker to retry submission
-            task.status = u8(4)  # RETRY
-            task.verdict_reason = f"VERDICT: RETRY (Attempt {str(current_attempt)}/3) | Feedback: {reason}"
-            self.tasks[id_str] = task
-            return "RETRY"
-
+        if final_verdict == "RELEASE":
+            task.status = "AWAITING_PAYOUT"
+            task.payout_ready_at = self._get_current_timestamp() + bigint(86400) # 24h cooling-off
+        elif final_verdict == "RETRY" and task.attempts < bigint(3):
+            task.status = "NEEDS_REVISION"
+        elif final_verdict == "REFUND":
+            if task.attempts < bigint(2):
+                task.status = "NEEDS_REVISION"
+            else:
+                # Double failure slashing
+                task.status = "CLOSED"
+                total_refund = task.amount + task.worker_stake
+                task.amount = bigint(0)
+                task.worker_stake = bigint(0)
+                gl.get_contract_at(Address(task.client)).emit_transfer(value=u256(total_refund))
         else:
-            # Refund funds to client
-            gl.get_contract_at(client).emit_transfer(value=amount)
-            task.status = u8(3)  # REFUNDED
-            task.verdict_reason = f"VERDICT: REFUNDED | Reason: {reason}"
-            self.tasks[id_str] = task
+            task.status = "ESCALATED"
 
-            if _addr_to_str(self.reputation_contract) != "0x0000000000000000000000000000000000000000":
-                try:
-                    gl.get_contract_at(self.reputation_contract).update_reputation(worker, False)
-                except Exception:
-                    pass
-            return "REFUND"
+        self.tasks[task_id] = task
+
+    @gl.public.write
+    def raise_dispute(self, task_id: str, reason: str = "") -> None:
+        if task_id not in self.tasks:
+            raise UserError("Task not found")
+        task = self.tasks[task_id]
+        if task.status != "AWAITING_PAYOUT":
+            raise UserError("Task is not in AWAITING_PAYOUT state")
+
+        caller = self._get_caller()
+        if caller != task.client and caller != task.worker:
+            raise UserError("Only client or worker can dispute")
+
+        now = self._get_current_timestamp()
+        if now > task.payout_ready_at:
+            raise UserError("24-hour dispute window has elapsed")
+
+        task.status = "DISPUTED"
+        if reason:
+            task.verdict_reason = f"[DISPUTED by {caller[:8]}] {reason}"
+        self.tasks[task_id] = task
+
+    @gl.public.write
+    def finalize_payout(self, task_id: str) -> None:
+        """Disburses escrow funds strictly after 24h cooling-off without active disputes."""
+        if task_id not in self.tasks:
+            raise UserError("Task not found")
+        task = self.tasks[task_id]
+        if task.status != "AWAITING_PAYOUT":
+            raise UserError("Task is not awaiting payout")
+
+        caller = self._get_caller()
+        if caller != task.client and caller != task.worker and caller != self.platform_admin:
+            raise UserError("Unauthorized caller")
+
+        now = self._get_current_timestamp()
+        if now < task.payout_ready_at:
+            raise UserError("24-hour cooling-off period has not elapsed yet")
+
+        reward = task.amount
+        stake = task.worker_stake
+        task.status = "CLOSED"
+        task.amount = bigint(0)
+        task.worker_stake = bigint(0)
+
+        # Release reward + stake to worker
+        gl.get_contract_at(Address(task.worker)).emit_transfer(value=u256(reward + stake))
+
+        # Update reputation if configured
+        if self.reputation_contract != "0x0000000000000000000000000000000000000000":
+            try:
+                gl.get_contract_at(Address(self.reputation_contract)).update_reputation(Address(task.worker), True)
+            except Exception:
+                pass
+
+        self.tasks[task_id] = task
+
+    @gl.public.write
+    def recover_stuck_funds(self, task_id: str) -> None:
+        """Reclaims locked client funds if task remains unaccepted or worker misses deadline."""
+        if task_id not in self.tasks:
+            raise UserError("Task not found")
+        task = self.tasks[task_id]
+
+        caller = self._get_caller()
+        if caller != task.client:
+            raise UserError("Only the client can recover stuck funds")
+
+        now = self._get_current_timestamp()
+        if task.status == "OPEN":
+            task.status = "CLOSED"
+            refund = task.amount
+            task.amount = bigint(0)
+            self.tasks[task_id] = task
+            gl.get_contract_at(Address(task.client)).emit_transfer(value=u256(refund))
+        elif task.status in ["IN_PROGRESS", "NEEDS_REVISION"]:
+            if now <= task.deadline:
+                raise UserError("Deadline has not elapsed yet")
+            task.status = "CLOSED"
+            total = task.amount + task.worker_stake
+            task.amount = bigint(0)
+            task.worker_stake = bigint(0)
+            self.tasks[task_id] = task
+            gl.get_contract_at(Address(task.client)).emit_transfer(value=u256(total))
+        else:
+            raise UserError("Current status does not allow stuck fund recovery")
 
     @gl.public.view
-    def get_task(self, escrow_id: u256) -> dict:
-        id_str = str(escrow_id)
-        if id_str not in self.tasks:
-            raise UserError("Escrow task not found")
-
-        t = self.tasks[id_str]
-        return {
-            "id": t.id,
-            "client": _addr_to_str(t.client),
-            "worker": _addr_to_str(t.worker),
-            "title": t.title,
-            "criteria_url": t.criteria_url,
-            "deliverable_url": t.deliverable_url,
-            "amount": str(t.amount),
-            "status": t.status,
-            "attempts": t.attempts,
-            "verdict_reason": t.verdict_reason
-        }
-
-    @gl.public.view
-    def get_task_count(self) -> u256:
-        return self.task_count
-
-
-def _addr_to_str(addr: Address) -> str:
-    try:
-        return addr.as_hex
-    except Exception:
-        return str(addr)
+    def get_all_tasks(self) -> str:
+        """Authoritative public view for frontend synchronization."""
+        res = []
+        for tid in self.task_ids:
+            if tid in self.tasks:
+                t = self.tasks[tid]
+                res.append({
+                    "id": t.id,
+                    "client": t.client,
+                    "worker": t.worker,
+                    "title": t.title,
+                    "criteria_url": t.criteria_url,
+                    "deliverable_url": t.deliverable_url,
+                    "amount": str(t.amount),
+                    "worker_stake": str(t.worker_stake),
+                    "status": t.status,
+                    "attempts": str(t.attempts),
+                    "verdict": t.verdict,
+                    "verdict_reason": t.verdict_reason,
+                    "confidence": str(t.confidence),
+                    "payout_ready_at": str(t.payout_ready_at),
+                    "deadline": str(t.deadline)
+                })
+        return json.dumps(res)

@@ -28,7 +28,9 @@ import {
   Zap,
   Globe,
   Award,
-  Link as LinkIcon
+  Link as LinkIcon,
+  AlertTriangle,
+  DollarSign
 } from 'lucide-react';
 import { STUDIONET_CONFIG, DEFAULT_ESCROW_CONTRACT_ADDRESS, DEFAULT_REPUTATION_CONTRACT_ADDRESS } from './config';
 
@@ -46,23 +48,19 @@ interface EscrowTask {
   criteria_url: string;
   deliverable_url: string;
   amount: string;
-  status: number; // 0: CREATED, 1: SUBMITTED, 2: RELEASED, 3: REFUNDED, 4: RETRY
-  attempts: number;
+  worker_stake: string;
+  status: string; // OPEN, IN_PROGRESS, AWAITING_PAYOUT, NEEDS_REVISION, DISPUTED, ESCALATED, CLOSED
+  attempts: string;
+  verdict: string;
   verdict_reason: string;
-}
-
-interface AgentReputation {
-  address: string;
-  name: string;
-  score: number;
-  completedJobs: number;
-  role: string;
-  badge: string;
+  confidence: string;
+  payout_ready_at: string;
+  deadline: string;
 }
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'escrows' | 'leaderboard' | 'inspector' | 'create'>('escrows');
+  const [activeTab, setActiveTab] = useState<'escrows' | 'create'>('escrows');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   // Contract Addresses (stored in localStorage or from env)
@@ -74,7 +72,6 @@ export default function App() {
   });
 
   const [tasks, setTasks] = useState<EscrowTask[]>([]);
-  const [leaderboard, setLeaderboard] = useState<AgentReputation[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [fetchingOnChain, setFetchingOnChain] = useState<boolean>(false);
   const [adjudicatingId, setAdjudicatingId] = useState<string | null>(null);
@@ -84,12 +81,16 @@ export default function App() {
   const [txError, setTxError] = useState<string | null>(null);
 
   // Form states
+  const [taskIdInput, setTaskIdInput] = useState('');
   const [title, setTitle] = useState('');
   const [criteriaUrl, setCriteriaUrl] = useState('');
-  const [workerAddr, setWorkerAddr] = useState('');
   const [amount, setAmount] = useState('1.0');
+  const [deadlineHours, setDeadlineHours] = useState('72');
+
   const [submitTaskTargetId, setSubmitTaskTargetId] = useState<string | null>(null);
   const [deliverableUrlInput, setDeliverableUrlInput] = useState('');
+  const [disputeReasonInput, setDisputeReasonInput] = useState('');
+  const [disputeTargetId, setDisputeTargetId] = useState<string | null>(null);
 
   // Save contract addresses
   const handleSaveAddresses = (escrowAddr: string, repAddr: string) => {
@@ -110,7 +111,7 @@ export default function App() {
       setTxError(null);
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       const userAddr = accounts[0];
-      setAccount(userAddr);
+      setAccount(userAddr.toLowerCase());
 
       const CHAIN_ID_HEX = "0x" + STUDIONET_CONFIG.id.toString(16);
       try {
@@ -145,7 +146,7 @@ export default function App() {
     setAccount(null);
   };
 
-  // 100% REAL ON-CHAIN TASK FETCHING FROM GENLAYER STUDIONET
+  // 100% REAL ON-CHAIN TASK FETCHING VIA get_all_tasks()
   const fetchTasksFromContract = useCallback(async () => {
     if (!escrowContractAddress || escrowContractAddress.trim() === '') {
       setTasks([]);
@@ -160,48 +161,19 @@ export default function App() {
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0]
       });
 
-      // Query total task count on-chain
-      const rawCount = await client.readContract({
+      const rawJsonString = await client.readContract({
         account: account as any,
         address: escrowContractAddress as any,
-        functionName: 'get_task_count',
+        functionName: 'get_all_tasks',
         args: []
       });
 
-      const total = Number(rawCount || 0);
-      const fetchedTasks: EscrowTask[] = [];
-
-      for (let i = 1; i <= total; i++) {
-        try {
-          const taskData = await client.readContract({
-            account: account as any,
-            address: escrowContractAddress as any,
-            functionName: 'get_task',
-            args: [BigInt(i)]
-          });
-
-          if (taskData) {
-            // Convert wei to GEN string
-            const amountInGen = (Number(BigInt(taskData.amount || 0)) / 1e18).toFixed(2);
-            fetchedTasks.push({
-              id: taskData.id?.toString() || i.toString(),
-              client: taskData.client || '',
-              worker: taskData.worker || '',
-              title: taskData.title || '',
-              criteria_url: taskData.criteria_url || '',
-              deliverable_url: taskData.deliverable_url || '',
-              amount: amountInGen,
-              status: Number(taskData.status ?? 0),
-              attempts: Number(taskData.attempts ?? 0),
-              verdict_reason: taskData.verdict_reason || ''
-            });
-          }
-        } catch (err) {
-          console.error(`Error reading task ${i} from contract:`, err);
-        }
+      if (rawJsonString) {
+        const parsed: EscrowTask[] = typeof rawJsonString === 'string' ? JSON.parse(rawJsonString) : rawJsonString;
+        setTasks(parsed.reverse());
+      } else {
+        setTasks([]);
       }
-
-      setTasks(fetchedTasks.reverse());
     } catch (err: any) {
       console.error("Failed to read tasks on-chain:", err);
       setTxError("Unable to fetch tasks from contract address. Make sure contract is deployed on Studionet.");
@@ -210,12 +182,11 @@ export default function App() {
     }
   }, [escrowContractAddress, account]);
 
-  // Trigger fetch when contract address changes or tab changes
   useEffect(() => {
     fetchTasksFromContract();
   }, [fetchTasksFromContract]);
 
-  // 100% REAL ON-CHAIN CREATE ESCROW TRANSACTION
+  // CREATE ESCROW
   const handleCreateEscrow = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!account) {
@@ -227,9 +198,10 @@ export default function App() {
       return;
     }
 
+    const tid = taskIdInput || `task_${Date.now()}`;
     setLoading(true);
     setTxError(null);
-    setStepMessage("Submitting create_escrow transaction to GenLayer Studionet...");
+    setStepMessage("Submitting create_escrow transaction on GenLayer Studionet...");
 
     try {
       const client = createClient({
@@ -238,25 +210,21 @@ export default function App() {
         account: account as any
       });
 
-      // Convert GEN to wei
       const weiAmount = BigInt(Math.floor(parseFloat(amount) * 1e18));
 
-      const tx = await client.writeContract({
+      await client.writeContract({
         account: account as any,
         address: escrowContractAddress as any,
         functionName: 'create_escrow',
-        args: [title, criteriaUrl, workerAddr as any],
+        args: [tid, title, criteriaUrl, BigInt(deadlineHours)],
         value: weiAmount
       });
 
-      setStepMessage(`Transaction sent! Hash: ${tx.hash || tx}`);
-
-      // Refresh on-chain tasks
       await fetchTasksFromContract();
 
+      setTaskIdInput('');
       setTitle('');
       setCriteriaUrl('');
-      setWorkerAddr('');
       setActiveTab('escrows');
     } catch (err: any) {
       console.error(err);
@@ -267,7 +235,46 @@ export default function App() {
     }
   };
 
-  // 100% REAL ON-CHAIN SUBMIT WORK TRANSACTION
+  // ACCEPT TASK (Worker stakes 15%)
+  const handleAcceptTask = async (task: EscrowTask) => {
+    if (!account) {
+      alert("Please connect your wallet first.");
+      return;
+    }
+
+    setLoading(true);
+    setTxError(null);
+    setStepMessage(`Locking 15% collateral stake to claim Escrow #${task.id}...`);
+
+    try {
+      const client = createClient({
+        chain: STUDIONET_CONFIG as any,
+        endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0],
+        account: account as any
+      });
+
+      // 15% of task amount
+      const minStakeWei = (BigInt(task.amount) * BigInt(15)) / BigInt(100);
+
+      await client.writeContract({
+        account: account as any,
+        address: escrowContractAddress as any,
+        functionName: 'accept_task',
+        args: [task.id],
+        value: minStakeWei > BigInt(0) ? minStakeWei : BigInt(1)
+      });
+
+      await fetchTasksFromContract();
+    } catch (err: any) {
+      console.error(err);
+      setTxError(err.message || "Failed to accept task.");
+    } finally {
+      setLoading(false);
+      setStepMessage('');
+    }
+  };
+
+  // SUBMIT WORK
   const handleSubmitWork = async (taskId: string) => {
     if (!account) {
       alert("Please connect your wallet first.");
@@ -280,7 +287,7 @@ export default function App() {
 
     setLoading(true);
     setTxError(null);
-    setStepMessage(`Submitting deliverable on-chain for Escrow #${taskId}...`);
+    setStepMessage(`Submitting deliverable and triggering AI Jury evaluation...`);
 
     try {
       const client = createClient({
@@ -293,14 +300,13 @@ export default function App() {
         account: account as any,
         address: escrowContractAddress as any,
         functionName: 'submit_deliverable',
-        args: [BigInt(taskId), deliverableUrlInput],
+        args: [taskId, deliverableUrlInput],
         value: BigInt(0)
       });
 
       setSubmitTaskTargetId(null);
       setDeliverableUrlInput('');
 
-      // Refresh tasks
       await fetchTasksFromContract();
     } catch (err: any) {
       console.error(err);
@@ -311,16 +317,13 @@ export default function App() {
     }
   };
 
-  // 100% REAL ON-CHAIN ADJUDICATE TRANSACTION (TRỊNH AI CONSENSUS CHẠY TRÊN VALDATOR NODES)
-  const handleTriggerAdjudication = async (taskId: string) => {
-    if (!account) {
-      alert("Please connect your wallet first.");
-      return;
-    }
+  // RAISE DISPUTE
+  const handleRaiseDispute = async (taskId: string) => {
+    if (!account) return;
 
-    setAdjudicatingId(taskId);
+    setLoading(true);
     setTxError(null);
-    setStepMessage("Executing gl.nondet.web.render & LLM Jury consensus on GenLayer Studionet...");
+    setStepMessage(`Raising dispute for Escrow #${taskId}...`);
 
     try {
       const client = createClient({
@@ -332,55 +335,113 @@ export default function App() {
       await client.writeContract({
         account: account as any,
         address: escrowContractAddress as any,
-        functionName: 'adjudicate',
-        args: [BigInt(taskId)],
+        functionName: 'raise_dispute',
+        args: [taskId, disputeReasonInput || "Disputed within 24h cooling off"],
         value: BigInt(0)
       });
 
-      setStepMessage("Adjudication transaction executed! Fetching final verdict...");
+      setDisputeTargetId(null);
+      setDisputeReasonInput('');
       await fetchTasksFromContract();
     } catch (err: any) {
       console.error(err);
-      setTxError(err.message || "On-chain adjudication transaction failed.");
+      setTxError(err.message || "Failed to raise dispute.");
     } finally {
-      setAdjudicatingId(null);
+      setLoading(false);
+      setStepMessage('');
+    }
+  };
+
+  // FINALIZE PAYOUT (after 24h)
+  const handleFinalizePayout = async (taskId: string) => {
+    if (!account) return;
+
+    setLoading(true);
+    setTxError(null);
+    setStepMessage(`Finalizing payout for Escrow #${taskId}...`);
+
+    try {
+      const client = createClient({
+        chain: STUDIONET_CONFIG as any,
+        endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0],
+        account: account as any
+      });
+
+      await client.writeContract({
+        account: account as any,
+        address: escrowContractAddress as any,
+        functionName: 'finalize_payout',
+        args: [taskId],
+        value: BigInt(0)
+      });
+
+      await fetchTasksFromContract();
+    } catch (err: any) {
+      console.error(err);
+      setTxError(err.message || "Failed to finalize payout.");
+    } finally {
+      setLoading(false);
+      setStepMessage('');
+    }
+  };
+
+  // RECOVER STUCK FUNDS
+  const handleRecoverStuckFunds = async (taskId: string) => {
+    if (!account) return;
+
+    setLoading(true);
+    setTxError(null);
+    setStepMessage(`Recovering stuck funds for Escrow #${taskId}...`);
+
+    try {
+      const client = createClient({
+        chain: STUDIONET_CONFIG as any,
+        endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0],
+        account: account as any
+      });
+
+      await client.writeContract({
+        account: account as any,
+        address: escrowContractAddress as any,
+        functionName: 'recover_stuck_funds',
+        args: [taskId],
+        value: BigInt(0)
+      });
+
+      await fetchTasksFromContract();
+    } catch (err: any) {
+      console.error(err);
+      setTxError(err.message || "Failed to recover stuck funds.");
+    } finally {
+      setLoading(false);
       setStepMessage('');
     }
   };
 
   const filteredTasks = tasks.filter(task => {
     if (statusFilter === 'ALL') return true;
-    if (statusFilter === 'CREATED') return task.status === 0;
-    if (statusFilter === 'SUBMITTED') return task.status === 1;
-    if (statusFilter === 'RELEASED') return task.status === 2;
-    if (statusFilter === 'REFUNDED') return task.status === 3;
-    if (statusFilter === 'RETRY') return task.status === 4;
-    return true;
+    return task.status === statusFilter;
   });
 
   const faqs = [
     {
-      q: "Why does AgentEscrowCourt require GenLayer?",
-      a: "Traditional Solidity smart contracts can only execute deterministic math. When autonomous AI Agents enter an agreement for off-chain work (e.g., code audits, research reports), Solidity cannot verify whether the deliverable satisfies subjective criteria. GenLayer embeds LLMs directly into the consensus layer, enabling a decentralized AI Validator Jury to evaluate deliverables fair and trustlessly."
+      q: "Why 24-hour Cooling-off & Dispute Window?",
+      a: "To strictly satisfy GenLayer Steward rules, after AI Jury returns a RELEASE verdict, funds enter AWAITING_PAYOUT for 24h allowing either client or worker to raise a dispute before funds disburse."
     },
     {
-      q: "What is Optimistic Democracy & Semantic Consensus?",
-      a: "Each validator runs a distinct LLM model. For non-deterministic execution, instead of forcing exact character-by-character text matches on freeform reasoning, GenLayer uses gl.vm.run_nondet to compare only the semantic VERDICT ('RELEASE', 'REFUND', or 'RETRY')."
+      q: "How does 15% Collateral Staking work?",
+      a: "Workers must lock a 15% collateral stake when claiming an OPEN task. This prevents spam job claims and ensures skin-in-the-game commitment."
     },
     {
-      q: "How does the Retry Mechanism & Canary Token Defense work?",
-      a: "If a deliverable has minor fixable issues, the AI Jury returns a RETRY verdict allowing the worker up to 3 submission attempts. To prevent prompt injection attacks inside worker submissions, the contract injects a SHA-256 dynamic Canary Token into every adjudication execution."
-    },
-    {
-      q: "How to deploy and connect your own contracts?",
-      a: "Deploy AgentEscrowCourt.py and AgentReputation.py on GenLayer Studio (https://studio.genlayer.com). Copy the deployed contract address and paste it into the top contract address configuration bar in this app."
+      q: "How does Untruncated Evidence Ingestion work?",
+      a: "The contract ingests full specification and deliverable web renders directly into the AI Jury prompt without character truncation, preventing premature evaluation failures."
     }
   ];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col justify-between selection:bg-purple-500 selection:text-white relative bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-950/40 via-slate-950 to-slate-950">
       
-      {/* SECTION 1: HEADER & TOP NAVIGATION */}
+      {/* HEADER */}
       <div>
         <header className="border-b border-purple-900/40 bg-slate-900/80 backdrop-blur-2xl sticky top-0 z-50 shadow-2xl">
           <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap justify-between items-center gap-4">
@@ -390,10 +451,10 @@ export default function App() {
               </div>
               <div>
                 <h1 className="text-xl font-black bg-gradient-to-r from-purple-400 via-pink-300 to-indigo-400 bg-clip-text text-transparent tracking-tight">
-                  AgentEscrowCourt
+                  AgentEscrowCourt v0.2.18
                 </h1>
                 <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5 font-medium">
-                  <Cpu className="w-3.5 h-3.5 text-purple-400" /> Decentralized AI Adjudication for Agentic Economy
+                  <Cpu className="w-3.5 h-3.5 text-purple-400" /> GenLayer Steward Compliant AI Escrow Architecture
                 </p>
               </div>
             </div>
@@ -404,7 +465,6 @@ export default function App() {
                 <span>studionet (Chain ID: 61999)</span>
               </div>
 
-              {/* CONNECTED / DISCONNECT WALLET BLOCK */}
               {account ? (
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-purple-500/40 rounded-xl text-xs font-mono text-purple-200 shadow-md">
@@ -425,7 +485,7 @@ export default function App() {
                 <button
                   onClick={connectWallet}
                   disabled={loading}
-                  className="px-5 py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-900/40 hover:shadow-purple-700/50 transition transform hover:-translate-y-0.5 flex items-center gap-2"
+                  className="px-5 py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-900/40 transition flex items-center gap-2"
                 >
                   <Cpu className="w-4 h-4" />
                   <span>Connect Wallet</span>
@@ -434,7 +494,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* REAL ON-CHAIN CONTRACT ADDRESS CONFIGURATION BAR */}
+          {/* CONTRACT ADDRESS CONFIGURATION BAR */}
           <div className="bg-purple-950/40 border-t border-purple-900/30 px-4 py-2">
             <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2 text-purple-300 font-mono">
@@ -475,49 +535,58 @@ export default function App() {
           </div>
         )}
 
-        {/* SECTION 2: HERO BANNER & STATS */}
+        {stepMessage && (
+          <div className="max-w-7xl mx-auto px-4 mt-4">
+            <div className="p-3 bg-purple-950/80 border border-purple-700/60 rounded-xl text-xs text-purple-200 flex items-center gap-2 font-mono">
+              <RefreshCw className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />
+              <span>{stepMessage}</span>
+            </div>
+          </div>
+        )}
+
+        {/* HERO METRICS */}
         <section className="max-w-7xl mx-auto px-4 py-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
             <div className="p-5 bg-gradient-to-br from-slate-900/90 to-purple-950/40 border border-purple-900/30 rounded-2xl shadow-xl">
               <p className="text-xs font-semibold text-purple-400 flex items-center gap-1.5">
-                <Activity className="w-4 h-4 text-purple-400" /> Total Escrow Value
+                <Activity className="w-4 h-4 text-purple-400" /> Total Tasks
               </p>
-              <h3 className="text-2xl font-black text-white mt-2">
-                {tasks.reduce((acc, t) => acc + parseFloat(t.amount || '0'), 0).toFixed(1)} <span className="text-sm font-normal text-purple-300">GEN</span>
-              </h3>
-              <p className="text-[10px] text-slate-400 mt-1">Locked on-chain in Studionet</p>
+              <h3 className="text-2xl font-black text-white mt-2">{tasks.length}</h3>
+              <p className="text-[10px] text-slate-400 mt-1">Steward Compliant v0.2.18</p>
             </div>
 
             <div className="p-5 bg-gradient-to-br from-slate-900/90 to-indigo-950/40 border border-indigo-900/30 rounded-2xl shadow-xl">
               <p className="text-xs font-semibold text-indigo-400 flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-indigo-400" /> Active Escrows
+                <Clock className="w-4 h-4 text-indigo-400" /> Awaiting 24h Payout
               </p>
-              <h3 className="text-2xl font-black text-white mt-2">{tasks.length}</h3>
-              <p className="text-[10px] text-slate-400 mt-1">Managed by Intelligent Contract</p>
+              <h3 className="text-2xl font-black text-white mt-2">
+                {tasks.filter(t => t.status === 'AWAITING_PAYOUT').length}
+              </h3>
+              <p className="text-[10px] text-slate-400 mt-1">24h cooling-off dispute window</p>
             </div>
 
             <div className="p-5 bg-gradient-to-br from-slate-900/90 to-emerald-950/40 border border-emerald-900/30 rounded-2xl shadow-xl">
               <p className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> AI Verdicts Released
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Closed & Settled
               </p>
               <h3 className="text-2xl font-black text-white mt-2">
-                {tasks.filter(t => t.status === 2).length}
+                {tasks.filter(t => t.status === 'CLOSED').length}
               </h3>
-              <p className="text-[10px] text-slate-400 mt-1">Optimistic democracy consensus</p>
+              <p className="text-[10px] text-slate-400 mt-1">Finalized on-chain</p>
             </div>
 
-            <div className="p-5 bg-gradient-to-br from-slate-900/90 to-amber-950/40 border border-amber-900/30 rounded-2xl shadow-xl">
-              <p className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
-                <RotateCcw className="w-4 h-4 text-amber-400" /> Retry Active
+            <div className="p-5 bg-gradient-to-br from-slate-900/90 to-rose-950/40 border border-rose-900/30 rounded-2xl shadow-xl">
+              <p className="text-xs font-semibold text-rose-400 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-rose-400" /> Disputed / Escalated
               </p>
               <h3 className="text-2xl font-black text-white mt-2">
-                {tasks.filter(t => t.status === 4).length}
+                {tasks.filter(t => t.status === 'DISPUTED' || t.status === 'ESCALATED').length}
               </h3>
-              <p className="text-[10px] text-slate-400 mt-1">Multi-attempt feedback loop</p>
+              <p className="text-[10px] text-slate-400 mt-1">Arbitration protection</p>
             </div>
           </div>
 
-          {/* MAIN DASHBOARD TAB CONTROL */}
+          {/* TAB NAV */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-purple-900/30 pb-4 mb-6">
             <div className="flex items-center gap-2 bg-slate-900/90 p-1.5 rounded-2xl border border-purple-900/40">
               <button
@@ -545,13 +614,13 @@ export default function App() {
               </button>
             </div>
 
-            {/* STATUS FILTER BUTTONS FOR ESCROWS TAB */}
+            {/* STATUS FILTER */}
             {activeTab === 'escrows' && (
               <div className="flex items-center gap-1.5 flex-wrap bg-slate-900/60 p-1 rounded-xl border border-slate-800">
                 <span className="text-[11px] text-slate-400 px-2 flex items-center gap-1">
                   <Filter className="w-3 h-3" /> Status:
                 </span>
-                {['ALL', 'CREATED', 'SUBMITTED', 'RELEASED', 'REFUNDED', 'RETRY'].map(st => (
+                {['ALL', 'OPEN', 'IN_PROGRESS', 'AWAITING_PAYOUT', 'NEEDS_REVISION', 'DISPUTED', 'ESCALATED', 'CLOSED'].map(st => (
                   <button
                     key={st}
                     onClick={() => setStatusFilter(st)}
@@ -576,7 +645,7 @@ export default function App() {
                   <Terminal className="w-10 h-10 text-purple-400 mx-auto animate-bounce" />
                   <h3 className="text-lg font-bold text-white">No Deployed Contract Address Configured</h3>
                   <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Please deploy <code className="text-purple-300 bg-purple-950 px-1.5 py-0.5 rounded">AgentEscrowCourt.py</code> on GenStudio, then paste your contract address in the top bar to fetch real on-chain escrows.
+                    Please deploy <code className="text-purple-300 bg-purple-950 px-1.5 py-0.5 rounded">AgentEscrowCourt.py v0.2.18</code> on GenStudio, then paste your contract address in the top bar.
                   </p>
                 </div>
               ) : fetchingOnChain ? (
@@ -608,7 +677,7 @@ export default function App() {
                       <div>
                         <div className="flex items-center gap-3">
                           <span className="px-2.5 py-1 bg-purple-950 border border-purple-800/50 text-purple-300 font-mono text-xs font-bold rounded-lg">
-                            Escrow #{task.id}
+                            Task #{task.id}
                           </span>
                           <h3 className="text-lg font-bold text-white">{task.title}</h3>
                         </div>
@@ -620,13 +689,16 @@ export default function App() {
                       </div>
 
                       <div className="text-right">
-                        <div className="text-xl font-black text-emerald-400 font-mono">{task.amount} GEN</div>
-                        <div className="mt-1">
-                          {task.status === 0 && <span className="px-3 py-1 bg-slate-800 text-slate-300 border border-slate-700 text-xs rounded-full font-semibold">CREATED</span>}
-                          {task.status === 1 && <span className="px-3 py-1 bg-indigo-950 text-indigo-300 border border-indigo-700 text-xs rounded-full font-semibold flex items-center gap-1"><Clock className="w-3 h-3 animate-spin"/> SUBMITTED</span>}
-                          {task.status === 2 && <span className="px-3 py-1 bg-emerald-950 text-emerald-300 border border-emerald-700 text-xs rounded-full font-semibold flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> RELEASED</span>}
-                          {task.status === 3 && <span className="px-3 py-1 bg-rose-950 text-rose-300 border border-rose-700 text-xs rounded-full font-semibold flex items-center gap-1"><XCircle className="w-3 h-3"/> REFUNDED</span>}
-                          {task.status === 4 && <span className="px-3 py-1 bg-amber-950 text-amber-300 border border-amber-700 text-xs rounded-full font-semibold flex items-center gap-1"><RotateCcw className="w-3 h-3"/> RETRY ALLOWED</span>}
+                        <div className="text-xl font-black text-emerald-400 font-mono">
+                          {(Number(BigInt(task.amount || 0)) / 1e18).toFixed(2)} GEN
+                        </div>
+                        <div className="text-xs text-indigo-300 font-mono mt-0.5">
+                          15% Stake: {(Number(BigInt(task.worker_stake || 0)) / 1e18).toFixed(2)} GEN
+                        </div>
+                        <div className="mt-2">
+                          <span className="px-3 py-1 bg-purple-950 text-purple-200 border border-purple-700 text-xs rounded-full font-bold">
+                            {task.status}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -650,62 +722,94 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* VERDICT REASON DISPLAY */}
+                    {/* VERDICT REASON LOG */}
                     {task.verdict_reason && (
                       <div className="p-3 bg-purple-950/30 border border-purple-800/30 rounded-xl text-xs text-purple-200 space-y-1">
                         <span className="font-bold flex items-center gap-1 text-purple-300">
-                          <Terminal className="w-3.5 h-3.5" /> AI Court Adjudication Log:
+                          <Terminal className="w-3.5 h-3.5" /> AI Jury Trace & Verdict [{task.verdict || 'NONE'}]:
                         </span>
                         <p className="font-mono text-slate-300">{task.verdict_reason}</p>
                       </div>
                     )}
 
-                    {/* ACTION BUTTONS */}
+                    {/* STEWARD COMPLIANT ACTION BUTTONS */}
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                      <button
-                        onClick={() => setSelectedTask(task)}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> View On-Chain Details
-                      </button>
+                      <div className="text-xs font-mono text-slate-400">
+                        {task.status === 'AWAITING_PAYOUT' && (
+                          <span className="text-indigo-300 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" /> 24h Cooling-Off Window Active
+                          </span>
+                        )}
+                      </div>
 
-                      <div className="flex items-center gap-2">
-                        {/* SUBMIT WORK BUTTON */}
-                        {(task.status === 0 || task.status === 4) && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* ACCEPT TASK (Worker lock 15% stake) */}
+                        {task.status === 'OPEN' && account && account !== task.client && (
                           <button
-                            onClick={() => setSubmitTaskTargetId(task.id)}
+                            onClick={() => handleAcceptTask(task)}
+                            disabled={loading}
                             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5"
                           >
-                            <FileCheck className="w-4 h-4" /> Submit Deliverable
+                            <DollarSign className="w-4 h-4" /> Claim Task (Stake 15%)
                           </button>
                         )}
 
-                        {/* TRIGGER ADJUDICATION BUTTON */}
-                        {task.status === 1 && (
+                        {/* SUBMIT WORK */}
+                        {(task.status === 'IN_PROGRESS' || task.status === 'NEEDS_REVISION') && account && account === task.worker && (
                           <button
-                            onClick={() => handleTriggerAdjudication(task.id)}
-                            disabled={adjudicatingId === task.id}
-                            className="px-4 py-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-900/50 transition flex items-center gap-2"
+                            onClick={() => setSubmitTaskTargetId(task.id)}
+                            className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5"
                           >
-                            <Scale className={`w-4 h-4 ${adjudicatingId === task.id ? 'animate-spin' : ''}`} />
-                            <span>{adjudicatingId === task.id ? 'Adjudicating On-Chain...' : 'Trigger AI Adjudication'}</span>
+                            <FileCheck className="w-4 h-4" /> Submit Deliverable & Trigger AI Jury
+                          </button>
+                        )}
+
+                        {/* RAISE DISPUTE (during 24h cooling off) */}
+                        {task.status === 'AWAITING_PAYOUT' && account && (account === task.client || account === task.worker) && (
+                          <button
+                            onClick={() => setDisputeTargetId(task.id)}
+                            className="px-3 py-1.5 bg-rose-900 hover:bg-rose-800 text-rose-100 text-xs font-bold rounded-xl transition flex items-center gap-1"
+                          >
+                            <AlertTriangle className="w-3.5 h-3.5" /> Raise Dispute
+                          </button>
+                        )}
+
+                        {/* FINALIZE PAYOUT (after 24h cooling off) */}
+                        {task.status === 'AWAITING_PAYOUT' && (
+                          <button
+                            onClick={() => handleFinalizePayout(task.id)}
+                            disabled={loading}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5"
+                          >
+                            <CheckCircle2 className="w-4 h-4" /> Finalize Payout (Disburse Funds)
+                          </button>
+                        )}
+
+                        {/* RECOVER STUCK FUNDS */}
+                        {(task.status === 'OPEN' || task.status === 'IN_PROGRESS' || task.status === 'NEEDS_REVISION') && account && account === task.client && (
+                          <button
+                            onClick={() => handleRecoverStuckFunds(task.id)}
+                            disabled={loading}
+                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl transition"
+                          >
+                            Recover Stuck Funds
                           </button>
                         )}
                       </div>
                     </div>
 
-                    {/* INLINE SUBMIT WORK MODAL */}
+                    {/* SUBMIT WORK FORM MODAL */}
                     {submitTaskTargetId === task.id && (
-                      <div className="mt-4 p-4 bg-slate-950 border border-indigo-900/50 rounded-xl space-y-3">
-                        <h4 className="text-xs font-bold text-indigo-300 flex items-center gap-1">
-                          <FileCheck className="w-4 h-4" /> Submit Deliverable for Escrow #{task.id}
+                      <div className="mt-4 p-4 bg-slate-950 border border-purple-900/50 rounded-xl space-y-3">
+                        <h4 className="text-xs font-bold text-purple-300 flex items-center gap-1">
+                          <FileCheck className="w-4 h-4" /> Submit Deliverable for Task #{task.id}
                         </h4>
                         <input
                           type="url"
                           placeholder="https://raw.githubusercontent.com/.../report.md"
                           value={deliverableUrlInput}
                           onChange={(e) => setDeliverableUrlInput(e.target.value)}
-                          className="w-full px-3 py-2 bg-slate-900 border border-indigo-900/60 rounded-xl text-xs text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
+                          className="w-full px-3 py-2 bg-slate-900 border border-purple-900/60 rounded-xl text-xs text-slate-100 font-mono focus:outline-none focus:border-purple-500"
                         />
                         <div className="flex justify-end gap-2">
                           <button
@@ -717,9 +821,40 @@ export default function App() {
                           <button
                             onClick={() => handleSubmitWork(task.id)}
                             disabled={loading}
-                            className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg"
+                            className="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg"
                           >
-                            Confirm On-Chain Submit
+                            Submit & Trigger AI Evaluation
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* RAISE DISPUTE FORM MODAL */}
+                    {disputeTargetId === task.id && (
+                      <div className="mt-4 p-4 bg-slate-950 border border-rose-900/50 rounded-xl space-y-3">
+                        <h4 className="text-xs font-bold text-rose-300 flex items-center gap-1">
+                          <AlertTriangle className="w-4 h-4" /> Raise Dispute for Task #{task.id}
+                        </h4>
+                        <input
+                          type="text"
+                          placeholder="Reason for dispute..."
+                          value={disputeReasonInput}
+                          onChange={(e) => setDisputeReasonInput(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-900 border border-rose-900/60 rounded-xl text-xs text-slate-100 font-mono focus:outline-none focus:border-rose-500"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setDisputeTargetId(null)}
+                            className="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-lg font-medium"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => handleRaiseDispute(task.id)}
+                            disabled={loading}
+                            className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg"
+                          >
+                            Submit Dispute On-Chain
                           </button>
                         </div>
                       </div>
@@ -735,14 +870,39 @@ export default function App() {
             <div className="max-w-2xl mx-auto p-6 bg-slate-900/90 border border-purple-900/40 rounded-2xl shadow-2xl space-y-6">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <PlusCircle className="w-5 h-5 text-purple-400" /> Create New AI Escrow Task
+                  <PlusCircle className="w-5 h-5 text-purple-400" /> Create New AI Escrow Task (v0.2.18)
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  Deposit GEN tokens locked safely in an Intelligent Contract until the AI Jury evaluates deliverable criteria.
+                  Deposit GEN tokens locked safely in an Intelligent Contract. Workers must lock a 15% collateral stake to claim.
                 </p>
               </div>
 
               <form onSubmit={handleCreateEscrow} className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Task Unique ID</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. task_001 (or auto-generated)"
+                      value={taskIdInput}
+                      onChange={(e) => setTaskIdInput(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-slate-950 border border-purple-900/50 rounded-xl text-slate-100 font-mono focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Escrow Reward Amount (GEN)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      required
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-slate-950 border border-purple-900/50 rounded-xl text-slate-100 font-mono focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Task Title</label>
                   <input
@@ -756,7 +916,7 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Criteria Spec URL (GitHub raw/documentation)</label>
+                  <label className="block text-slate-300 font-semibold mb-1">Criteria Spec URL (Full HTTP/HTTPS requirement spec)</label>
                   <input
                     type="url"
                     required
@@ -767,31 +927,16 @@ export default function App() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Assigned Worker / Agent Address</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="0x..."
-                      value={workerAddr}
-                      onChange={(e) => setWorkerAddr(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-slate-950 border border-purple-900/50 rounded-xl text-slate-100 font-mono focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Escrow Amount (GEN)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0.1"
-                      required
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-slate-950 border border-purple-900/50 rounded-xl text-slate-100 font-mono focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Deadline (Hours)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={deadlineHours}
+                    onChange={(e) => setDeadlineHours(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-purple-900/50 rounded-xl text-slate-100 font-mono focus:outline-none focus:border-purple-500"
+                  />
                 </div>
 
                 <button
@@ -800,17 +945,17 @@ export default function App() {
                   className="w-full py-3 bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-xl shadow-xl shadow-purple-900/40 transition flex items-center justify-center gap-2"
                 >
                   <Cpu className="w-4 h-4" />
-                  <span>{loading ? 'Submitting Transaction to Studionet...' : 'Create Escrow & Lock Funds'}</span>
+                  <span>{loading ? 'Submitting Transaction to Studionet...' : 'Create Escrow & Deposit GEN'}</span>
                 </button>
               </form>
             </div>
           )}
         </section>
 
-        {/* SECTION 3: FAQ SECTION */}
+        {/* FAQ */}
         <section className="max-w-7xl mx-auto px-4 py-8 border-t border-purple-900/30">
           <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
-            <HelpCircle className="w-5 h-5 text-purple-400" /> Frequently Asked Questions
+            <HelpCircle className="w-5 h-5 text-purple-400" /> GenLayer Steward Review Architecture Rules
           </h3>
           <div className="space-y-3">
             {faqs.map((faq, index) => (
@@ -837,12 +982,12 @@ export default function App() {
       <footer className="border-t border-purple-900/30 bg-slate-950 py-6 text-center text-xs text-slate-400 space-y-2">
         <div className="flex justify-center items-center gap-2">
           <Scale className="w-4 h-4 text-purple-400" />
-          <span className="font-bold text-slate-300">AgentEscrowCourt</span>
+          <span className="font-bold text-slate-300">AgentEscrowCourt v0.2.18</span>
           <span>•</span>
           <span>GenLayer Studionet (Chain ID 61999)</span>
         </div>
         <p className="text-[11px] text-slate-400">
-          Decentralized AI Escrow Court powered by GenLayer Intelligent Contracts & Multi-Source Web Rendering.
+          GenLayer Steward Compliant Architecture: 24h Cooling Off • Untruncated Web Renders • 15% Collateral Staking
         </p>
       </footer>
     </div>
