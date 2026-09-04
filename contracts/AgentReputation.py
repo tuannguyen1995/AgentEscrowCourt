@@ -12,8 +12,8 @@ class Contract(gl.Contract):
     agent_list: DynArray[Address]
 
     def __init__(self):
-        self.platform_admin = gl.message.sender
-        self.authorized_court = gl.message.sender
+        self.platform_admin = gl.message.sender_address
+        self.authorized_court = gl.message.sender_address
         self.scores = TreeMap()
         self.total_tasks = TreeMap()
         self.successful_tasks = TreeMap()
@@ -22,7 +22,7 @@ class Contract(gl.Contract):
 
     @gl.public.write
     def set_authorized_court(self, court_address: Address) -> None:
-        if gl.message.sender != self.platform_admin:
+        if gl.message.sender_address != self.platform_admin:
             raise UserError("Only platform admin can set authorized court")
         self.authorized_court = court_address
 
@@ -31,7 +31,7 @@ class Contract(gl.Contract):
         """
         Called by authorized AgentEscrowCourt contract upon finalized adjudication.
         """
-        if gl.message.sender != self.authorized_court and gl.message.sender != self.platform_admin:
+        if gl.message.sender_address != self.authorized_court and gl.message.sender_address != self.platform_admin:
             raise UserError("Unauthorized caller")
 
         if agent in self.scores:
