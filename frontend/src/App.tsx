@@ -101,6 +101,7 @@ export default function App() {
   const [selectedTask, setSelectedTask] = useState<EscrowTask | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [txError, setTxError] = useState<string | null>(null);
+  const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
   // Form states
   const [taskIdInput, setTaskIdInput] = useState('');
@@ -276,6 +277,27 @@ export default function App() {
     }
   }, [reputationContractAddress, account]);
 
+  // Restore connected wallet state automatically on F5 page refresh
+  useEffect(() => {
+    const restoreConnectedWallet = async () => {
+      const saved = localStorage.getItem('connected_wallet_account');
+      if (saved) {
+        setAccount(saved);
+      }
+      if (typeof window.ethereum !== 'undefined') {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          if (accounts && accounts.length > 0) {
+            const addr = accounts[0].toLowerCase();
+            setAccount(addr);
+            localStorage.setItem('connected_wallet_account', addr);
+          }
+        } catch (_) {}
+      }
+    };
+    restoreConnectedWallet();
+  }, []);
+
   useEffect(() => {
     fetchTasksFromContract();
     fetchLeaderboardFromContract();
@@ -296,9 +318,27 @@ export default function App() {
     const tid = taskIdInput || `task_${Date.now()}`;
     setLoading(true);
     setTxError(null);
-    setStepMessage("Submitting create_escrow transaction to GenLayer Studionet...");
+    setSuccessBanner(null);
 
     try {
+      if (typeof window.ethereum !== 'undefined' && account) {
+        setStepMessage("Opening MetaMask popup... Please approve signature in MetaMask.");
+        try {
+          await window.ethereum.request({
+            method: 'personal_sign',
+            params: [`Confirm Create Escrow Task #${tid} (Reward: ${amount} GEN)`, account]
+          });
+        } catch (userErr: any) {
+          if (userErr.code === 4001 || userErr.message?.includes("rejected")) {
+            setStepMessage('');
+            setLoading(false);
+            setTxError("Transaction signature cancelled in MetaMask.");
+            return;
+          }
+        }
+      }
+
+      setStepMessage("Submitting create_escrow transaction to GenLayer Studionet...");
       const genlayerAcc = getOrCreateGenLayerAccount();
       const client = createClient({
         chain: STUDIONET_CONFIG as any,
@@ -321,7 +361,8 @@ export default function App() {
       setTaskIdInput('');
       setTitle('');
       setCriteriaUrl('');
-      setActiveTab('escrows');
+      setSuccessBanner(`Escrow Task #${tid} successfully created and funded!`);
+      // NOTE: Do NOT switch activeTab away automatically!
     } catch (err: any) {
       console.error(err);
       setTxError(err.message || "On-chain transaction failed.");
@@ -690,6 +731,18 @@ export default function App() {
                 <span className="font-mono">{txError}</span>
               </div>
               <button onClick={() => setTxError(null)} className="text-rose-400 hover:text-white font-bold text-sm">✕</button>
+            </div>
+          </div>
+        )}
+
+        {successBanner && (
+          <div className="max-w-7xl mx-auto px-4 mt-4">
+            <div className="p-4 bg-emerald-950/90 border border-emerald-500 rounded-2xl text-xs text-emerald-200 flex items-center justify-between gap-3 shadow-[0_0_20px_rgba(16,185,129,0.4)]">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0 animate-pulse" />
+                <span className="font-mono">{successBanner}</span>
+              </div>
+              <button onClick={() => setSuccessBanner(null)} className="text-emerald-400 hover:text-white font-bold text-sm">✕</button>
             </div>
           </div>
         )}
