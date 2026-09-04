@@ -9,7 +9,8 @@ class Contract(gl.Contract):
     total_tasks: TreeMap[Address, u256]
     successful_tasks: TreeMap[Address, u256]
     failed_tasks: TreeMap[Address, u256]
-    agent_list: DynArray[Address]
+    agent_count: u256
+    agents: TreeMap[u256, Address]
 
     def __init__(self):
         self.platform_admin = gl.message.sender_address
@@ -18,7 +19,8 @@ class Contract(gl.Contract):
         self.total_tasks = TreeMap()
         self.successful_tasks = TreeMap()
         self.failed_tasks = TreeMap()
-        self.agent_list = DynArray()
+        self.agent_count = u256(0)
+        self.agents = TreeMap()
 
     @gl.public.write
     def set_authorized_court(self, court_address: Address) -> None:
@@ -46,7 +48,8 @@ class Contract(gl.Contract):
             fail = u256(0)
 
         if tot == u256(0):
-            self.agent_list.append(agent)
+            self.agents[self.agent_count] = agent
+            self.agent_count = self.agent_count + u256(1)
 
         self.total_tasks[agent] = tot + u256(1)
 
@@ -84,7 +87,9 @@ class Contract(gl.Contract):
     def get_all_reputations(self) -> str:
         """Authoritative public view for frontend leaderboard synchronization."""
         res = []
-        for a in self.agent_list:
+        count = int(self.agent_count)
+        for i in range(count):
+            a = self.agents[u256(i)]
             score = self.scores[a] if a in self.scores else u256(100)
             tot = self.total_tasks[a] if a in self.total_tasks else u256(0)
             succ = self.successful_tasks[a] if a in self.successful_tasks else u256(0)

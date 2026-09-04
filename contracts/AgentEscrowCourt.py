@@ -27,7 +27,8 @@ class Contract(gl.Contract):
     platform_admin: str
     reputation_contract: str
     tasks: TreeMap[str, EscrowTask]
-    task_ids: DynArray[str]
+    task_count: bigint
+    task_ids: TreeMap[bigint, str]
 
     def __init__(self):
         try:
@@ -36,7 +37,8 @@ class Contract(gl.Contract):
             self.platform_admin = str(getattr(gl.message, "sender_address", "0x0000000000000000000000000000000000000000")).lower()
         self.reputation_contract = "0x0000000000000000000000000000000000000000"
         self.tasks = TreeMap()
-        self.task_ids = DynArray()
+        self.task_count = bigint(0)
+        self.task_ids = TreeMap()
 
     def _get_caller(self) -> str:
         try:
@@ -126,7 +128,8 @@ class Contract(gl.Contract):
             payout_ready_at=bigint(0),
             deadline=self._get_current_timestamp() + dur
         )
-        self.task_ids.append(task_id)
+        self.task_ids[self.task_count] = task_id
+        self.task_count += bigint(1)
 
     @gl.public.write.payable
     def accept_task(self, task_id: str) -> None:
@@ -354,7 +357,8 @@ Respond ONLY with valid JSON:
     def get_all_tasks(self) -> str:
         """Authoritative public view for frontend synchronization."""
         res = []
-        for tid in self.task_ids:
+        for i in range(int(self.task_count)):
+            tid = self.task_ids[bigint(i)]
             if tid in self.tasks:
                 t = self.tasks[tid]
                 res.append({
