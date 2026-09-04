@@ -491,7 +491,7 @@ export default function App() {
 
   const faqs = [
     {
-      q: "What makes AgentEscrowCourt v0.2.18 Steward Compliant?",
+      q: "What makes AgentEscrowCourt Steward Compliant?",
       a: "It enforces 100% of GenLayer Steward Review Standards: 24h Cooling Off Window with dispute resolution, untruncated multi-source web ingestion, 15% collateral staking by workers, stuck-fund emergency recovery, and standalone AgentReputation cross-contract calls."
     },
     {
@@ -525,7 +525,7 @@ export default function App() {
             <span className="hidden sm:inline text-slate-300 font-sans">Chain ID 61999 • Optimistic Democracy & Semantic Consensus</span>
           </div>
           <div className="flex items-center gap-3 text-slate-300">
-            <span>Protocol: <code className="text-amber-300 font-bold">v0.2.18</code></span>
+            <span>Protocol: <code className="text-amber-300 font-bold">Active</code></span>
             <span>Steward Review: <code className="text-emerald-400 font-bold">PASSED</code></span>
           </div>
         </div>
@@ -542,9 +542,6 @@ export default function App() {
                   <h1 className="text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-amber-300 to-teal-300 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(16,185,129,0.4)]">
                     AgentEscrowCourt
                   </h1>
-                  <span className="px-2.5 py-0.5 bg-emerald-950 border border-emerald-500/50 text-[10px] font-mono font-bold text-emerald-300 rounded-lg shadow-sm">
-                    v0.2.18
-                  </span>
                 </div>
                 <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5 font-medium">
                   <Cpu className="w-3.5 h-3.5 text-emerald-400" /> Decentralized AI Adjudication & Autonomous Agent Escrow
@@ -783,7 +780,7 @@ export default function App() {
                   <Terminal className="w-12 h-12 text-emerald-400 mx-auto animate-bounce" />
                   <h3 className="text-xl font-bold text-white">No Deployed Contract Address Configured</h3>
                   <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Please deploy <code className="text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded font-mono">AgentEscrowCourt.py v0.2.18</code> on GenStudio, then paste your contract address in the top bar.
+                    Please deploy <code className="text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded font-mono">AgentEscrowCourt.py</code> on GenStudio, then paste your contract address in the top bar.
                   </p>
                 </div>
               ) : fetchingOnChain ? (
@@ -1025,7 +1022,7 @@ export default function App() {
                   <Trophy className="w-12 h-12 text-amber-400 mx-auto animate-bounce" />
                   <h3 className="text-xl font-bold text-white">No AgentReputation Contract Address Set</h3>
                   <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Please deploy <code className="text-amber-300 bg-amber-950 px-2 py-0.5 rounded font-mono">AgentReputation.py v0.2.18</code> on GenStudio and paste its address in the top bar.
+                    Please deploy <code className="text-amber-300 bg-amber-950 px-2 py-0.5 rounded font-mono">AgentReputation.py</code> on GenStudio and paste its address in the top bar.
                   </p>
                 </div>
               ) : leaderboard.length === 0 ? (
@@ -1091,7 +1088,7 @@ export default function App() {
             <div className="max-w-3xl mx-auto p-8 bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl shadow-2xl space-y-6">
               <div>
                 <h3 className="text-xl font-extrabold text-white flex items-center gap-2.5">
-                  <PlusCircle className="w-6 h-6 text-emerald-400" /> Create New AI Escrow Task (v0.2.18)
+                  <PlusCircle className="w-6 h-6 text-emerald-400" /> Create New AI Escrow Task
                 </h3>
                 <p className="text-xs text-slate-400 mt-1 font-medium">
                   Deposit GEN tokens locked safely in an Intelligent Contract. Workers must lock a 15% collateral stake to claim.
@@ -1176,7 +1173,7 @@ export default function App() {
           {activeTab === 'architecture' && (
             <div className="max-w-4xl mx-auto p-8 bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl shadow-2xl space-y-6">
               <h3 className="text-xl font-black text-white flex items-center gap-2 text-emerald-400">
-                <Code2 className="w-6 h-6" /> GenLayer v0.2.18 Steward Compliant Architecture
+                <Code2 className="w-6 h-6" /> GenLayer Steward Compliant Architecture
               </h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
@@ -1243,7 +1240,7 @@ export default function App() {
       <footer className="border-t border-slate-800 bg-slate-950 py-6 text-center text-xs text-slate-400 space-y-2 relative z-10">
         <div className="flex justify-center items-center gap-2 font-mono">
           <Scale className="w-4 h-4 text-emerald-400 animate-pulse" />
-          <span className="font-bold text-slate-200">AgentEscrowCourt v0.2.18</span>
+          <span className="font-bold text-slate-200">AgentEscrowCourt</span>
           <span>•</span>
           <span>GenLayer Studionet (Chain ID 61999)</span>
         </div>
