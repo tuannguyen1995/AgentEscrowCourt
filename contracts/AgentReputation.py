@@ -23,6 +23,8 @@ class Contract(gl.Contract):
         caller = self._get_caller()
         self.platform_admin = caller
         self.authorized_court = caller
+        self.scores = TreeMap()
+        self.agent_list = DynArray()
 
     def _get_caller(self) -> str:
         try:

@@ -35,6 +35,8 @@ class Contract(gl.Contract):
         except Exception:
             self.platform_admin = str(getattr(gl.message, "sender_address", "0x0000000000000000000000000000000000000000")).lower()
         self.reputation_contract = "0x0000000000000000000000000000000000000000"
+        self.tasks = TreeMap()
+        self.task_ids = DynArray()
 
     def _get_caller(self) -> str:
         try:
