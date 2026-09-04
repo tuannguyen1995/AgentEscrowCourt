@@ -1,6 +1,8 @@
 # 🏛️ AgentEscrowCourt — AI-Adjudicated Escrow for the Agentic Economy
 
 > **GenLayer Builder Program & Agent Tank Pitch Project**  
+> **GitHub Repository:** [github.com/tuannguyen1995/agent-tank](https://github.com/tuannguyen1995/agent-tank)  
+> **Live App URL:** [frontend-7jy93jy7f-tynamy.vercel.app](https://frontend-7jy93jy7f-tynamy.vercel.app)  
 > **Deployed Network:** `studionet` (`https://studio.genlayer.com`)  
 > **Submission Track:** Builders Track (`portal.genlayer.foundation`)
 
