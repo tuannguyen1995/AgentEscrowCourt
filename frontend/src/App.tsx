@@ -22,8 +22,12 @@ import {
   RotateCcw,
   ShieldAlert,
   Layers,
-  ArrowRight,
-  Sparkle
+  LogOut,
+  Filter,
+  Eye,
+  Zap,
+  Globe,
+  Award
 } from 'lucide-react';
 
 declare global {
@@ -64,11 +68,13 @@ interface AgentReputation {
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'escrows' | 'leaderboard' | 'inspector' | 'create'>('escrows');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [tasks, setTasks] = useState<EscrowTask[]>([]);
   const [leaderboard, setLeaderboard] = useState<AgentReputation[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [adjudicatingId, setAdjudicatingId] = useState<string | null>(null);
   const [stepMessage, setStepMessage] = useState<string>('');
+  const [selectedTask, setSelectedTask] = useState<EscrowTask | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   // Form states
@@ -79,7 +85,7 @@ export default function App() {
   const [submitTaskTargetId, setSubmitTaskTargetId] = useState<string | null>(null);
   const [deliverableUrlInput, setDeliverableUrlInput] = useState('');
 
-  // Auto connect or prompt network switch
+  // Connect wallet
   const connectWallet = async () => {
     if (typeof window.ethereum === 'undefined') {
       alert('MetaMask is not installed. Please install MetaMask to interact with GenLayer Studionet.');
@@ -119,7 +125,12 @@ export default function App() {
     }
   };
 
-  // Seed data with advanced status flow & attempt tracking
+  // Disconnect wallet
+  const disconnectWallet = () => {
+    setAccount(null);
+  };
+
+  // Seed data
   useEffect(() => {
     setTasks([
       {
@@ -154,7 +165,7 @@ export default function App() {
         criteria_url: "https://raw.githubusercontent.com/example/market-spec/main/criteria.txt",
         deliverable_url: "https://raw.githubusercontent.com/example/market-spec/main/draft_v1.txt",
         amount: "10.0",
-        status: 4, // RETRY
+        status: 4,
         attempts: 1,
         verdict_reason: "VERDICT: RETRY (Attempt 1/3) | Feedback: Report covers DEX volume but lacks cross-chain bridge liquidity proofs. Worker requested to revise and re-submit."
       }
@@ -273,6 +284,16 @@ export default function App() {
     }, 7500);
   };
 
+  const filteredTasks = tasks.filter(task => {
+    if (statusFilter === 'ALL') return true;
+    if (statusFilter === 'CREATED') return task.status === 0;
+    if (statusFilter === 'SUBMITTED') return task.status === 1;
+    if (statusFilter === 'RELEASED') return task.status === 2;
+    if (statusFilter === 'REFUNDED') return task.status === 3;
+    if (statusFilter === 'RETRY') return task.status === 4;
+    return true;
+  });
+
   const faqs = [
     {
       q: "Why does AgentEscrowCourt require GenLayer?",
@@ -293,22 +314,20 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col justify-between selection:bg-purple-500 selection:text-white">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col justify-between selection:bg-purple-500 selection:text-white relative bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-950/40 via-slate-950 to-slate-950">
       
       {/* SECTION 1: HEADER & TOP NAVIGATION */}
       <div>
-        <header className="border-b border-purple-900/40 bg-slate-900/80 backdrop-blur-xl sticky top-0 z-50 shadow-lg">
+        <header className="border-b border-purple-900/40 bg-slate-900/80 backdrop-blur-2xl sticky top-0 z-50 shadow-2xl">
           <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-gradient-to-br from-purple-600 via-indigo-600 to-pink-600 rounded-2xl shadow-xl shadow-purple-900/40 text-white transform hover:scale-105 transition">
+              <div className="p-3 bg-gradient-to-br from-purple-600 via-indigo-600 to-pink-600 rounded-2xl shadow-xl shadow-purple-900/40 text-white transform hover:scale-105 transition">
                 <Scale className="w-6 h-6 animate-pulse" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-black bg-gradient-to-r from-purple-400 via-pink-300 to-indigo-400 bg-clip-text text-transparent tracking-tight">
-                    AgentEscrowCourt
-                  </h1>
-                </div>
+                <h1 className="text-xl font-black bg-gradient-to-r from-purple-400 via-pink-300 to-indigo-400 bg-clip-text text-transparent tracking-tight">
+                  AgentEscrowCourt
+                </h1>
                 <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5 font-medium">
                   <Cpu className="w-3.5 h-3.5 text-purple-400" /> Decentralized AI Adjudication for Agentic Economy
                 </p>
@@ -321,10 +340,22 @@ export default function App() {
                 <span>studionet (Chain ID: 61999)</span>
               </div>
 
+              {/* CONNECTED / DISCONNECT WALLET BLOCK */}
               {account ? (
-                <div className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-purple-500/40 rounded-xl text-xs font-mono text-purple-200 shadow-md">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>{account.slice(0, 6)}...{account.slice(-4)}</span>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-purple-500/40 rounded-xl text-xs font-mono text-purple-200 shadow-md">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>{account.slice(0, 6)}...{account.slice(-4)}</span>
+                  </div>
+
+                  <button
+                    onClick={disconnectWallet}
+                    title="Disconnect Wallet"
+                    className="p-2 bg-rose-950/60 hover:bg-rose-900/80 border border-rose-600/40 rounded-xl text-rose-300 transition shadow-md flex items-center justify-center gap-1 text-xs font-semibold"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span className="hidden sm:inline">Disconnect</span>
+                  </button>
                 </div>
               ) : (
                 <button
@@ -339,7 +370,7 @@ export default function App() {
         </header>
 
         {/* SECTION 2: HERO BANNER & PROTOCOL METRICS */}
-        <section className="bg-gradient-to-b from-purple-950/50 via-slate-950 to-slate-950 border-b border-slate-900 pt-10 pb-8 px-4 relative overflow-hidden">
+        <section className="border-b border-slate-900 pt-10 pb-8 px-4 relative overflow-hidden">
           <div className="absolute top-0 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none"></div>
           <div className="max-w-7xl mx-auto relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
@@ -358,14 +389,14 @@ export default function App() {
 
                 {/* Feature Badges */}
                 <div className="grid grid-cols-3 gap-2.5 pt-2">
-                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] font-semibold text-purple-300 flex items-center gap-1.5">
-                    <ShieldAlert className="w-3.5 h-3.5 text-amber-400" /> Canary Token Defense
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] font-bold text-purple-300 flex items-center gap-1.5 shadow-md">
+                    <ShieldAlert className="w-4 h-4 text-amber-400" /> Canary Token Defense
                   </div>
-                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] font-semibold text-emerald-300 flex items-center gap-1.5">
-                    <RotateCcw className="w-3.5 h-3.5 text-emerald-400" /> 3-Attempt Retry Flow
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] font-bold text-emerald-300 flex items-center gap-1.5 shadow-md">
+                    <RotateCcw className="w-4 h-4 text-emerald-400" /> 3-Attempt Retry Flow
                   </div>
-                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] font-semibold text-indigo-300 flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-indigo-400" /> Multi-Source Evidence
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] font-bold text-indigo-300 flex items-center gap-1.5 shadow-md">
+                    <Layers className="w-4 h-4 text-indigo-400" /> Multi-Source Evidence
                   </div>
                 </div>
               </div>
@@ -456,6 +487,29 @@ export default function App() {
           {activeTab === 'escrows' && (
             <div className="space-y-6">
 
+              {/* Status Filter Bar */}
+              <div className="flex items-center justify-between bg-slate-900/80 border border-slate-800 rounded-2xl p-3 px-4 shadow-lg overflow-x-auto">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                  <Filter className="w-4 h-4 text-purple-400" /> Status Filter:
+                </div>
+
+                <div className="flex gap-2">
+                  {['ALL', 'CREATED', 'SUBMITTED', 'RELEASED', 'RETRY', 'REFUNDED'].map(st => (
+                    <button
+                      key={st}
+                      onClick={() => setStatusFilter(st)}
+                      className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition ${
+                        statusFilter === st
+                          ? 'bg-purple-900/60 border border-purple-500/40 text-purple-200'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Progress Banner during Adjudication */}
               {adjudicatingId && (
                 <div className="bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-950 border border-purple-500/50 rounded-2xl p-6 shadow-2xl animate-pulse">
@@ -470,8 +524,10 @@ export default function App() {
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {tasks.map(task => (
-                  <div key={task.id} className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 hover:border-purple-500/40 transition flex flex-col justify-between space-y-4 shadow-xl">
+                {filteredTasks.map(task => (
+                  <div key={task.id} className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 hover:border-purple-500/40 transition flex flex-col justify-between space-y-4 shadow-xl relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-purple-600/5 rounded-full blur-xl group-hover:bg-purple-600/10 transition"></div>
+                    
                     <div>
                       <div className="flex justify-between items-start">
                         <span className="text-xs font-mono text-purple-400 font-bold">Escrow #{task.id}</span>
@@ -533,11 +589,11 @@ export default function App() {
                       )}
                     </div>
 
-                    <div className="pt-2">
+                    <div className="pt-2 flex flex-col gap-2">
                       {(task.status === 0 || task.status === 4) && (
                         <button
                           onClick={() => setSubmitTaskTargetId(task.id)}
-                          className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
+                          className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-md"
                         >
                           <PlusCircle className="w-4 h-4" /> Submit Deliverable (Attempt {task.attempts + 1}/3)
                         </button>
@@ -552,6 +608,13 @@ export default function App() {
                           <Scale className="w-4 h-4" /> Trigger GenLayer AI Adjudication
                         </button>
                       )}
+
+                      <button
+                        onClick={() => setSelectedTask(task)}
+                        className="w-full py-2 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> View On-Chain Details
+                      </button>
 
                       {submitTaskTargetId === task.id && (
                         <div className="mt-3 p-3 bg-slate-950 border border-slate-800 rounded-xl flex gap-2">
@@ -749,6 +812,47 @@ export default function App() {
           )}
 
         </main>
+
+        {/* TASK DETAIL MODAL */}
+        {selectedTask && (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-purple-900/50 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4 font-mono text-xs relative">
+              <button
+                onClick={() => setSelectedTask(null)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+
+              <div className="flex items-center gap-2 text-purple-400 font-bold text-sm">
+                <Scale className="w-5 h-5" /> Escrow Task On-Chain Record #{selectedTask.id}
+              </div>
+
+              <div className="space-y-2 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                <p><span className="text-slate-500">Title:</span> <span className="text-slate-100 font-bold">{selectedTask.title}</span></p>
+                <p><span className="text-slate-500">Client:</span> <span className="text-purple-300">{selectedTask.client}</span></p>
+                <p><span className="text-slate-500">Worker:</span> <span className="text-indigo-300">{selectedTask.worker}</span></p>
+                <p><span className="text-slate-500">Amount:</span> <span className="text-emerald-400 font-bold">{selectedTask.amount} GEN</span></p>
+                <p><span className="text-slate-500">Attempts:</span> <span className="text-amber-400 font-bold">{selectedTask.attempts} / 3</span></p>
+                <p><span className="text-slate-500">Status Flag:</span> <span className="text-purple-300 font-bold">{selectedTask.status}</span></p>
+              </div>
+
+              {selectedTask.verdict_reason && (
+                <div className="p-3 bg-purple-950/50 border border-purple-700/40 rounded-xl text-purple-200">
+                  <p className="font-bold text-purple-300">Reasoning Log:</p>
+                  <p className="mt-1 leading-relaxed text-slate-300">{selectedTask.verdict_reason}</p>
+                </div>
+              )}
+
+              <button
+                onClick={() => setSelectedTask(null)}
+                className="w-full py-2 bg-purple-600 hover:bg-purple-500 font-bold text-white rounded-xl"
+              >
+                Close Inspector
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* SECTION 4: INTERACTIVE FAQ & ENTERPRISE FOOTER */}
         <section className="bg-slate-900/60 border-t border-slate-800 py-12 px-4 mt-12">
