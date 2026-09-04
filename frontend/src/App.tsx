@@ -162,10 +162,9 @@ export default function App() {
 
   // 100% REAL ON-CHAIN TASK FETCHING VIA get_all_tasks()
   const fetchTasksFromContract = useCallback(async () => {
-    if (!escrowContractAddress || escrowContractAddress.trim() === '') {
-      setTasks([]);
-      return;
-    }
+    const targetAddr = (escrowContractAddress && escrowContractAddress.trim() !== '') 
+      ? escrowContractAddress 
+      : DEFAULT_ESCROW_CONTRACT_ADDRESS;
 
     try {
       setFetchingOnChain(true);
@@ -177,7 +176,7 @@ export default function App() {
 
       const rawJsonString = await client.readContract({
         account: account as any,
-        address: escrowContractAddress as any,
+        address: targetAddr as any,
         functionName: 'get_all_tasks',
         args: []
       });
@@ -198,10 +197,9 @@ export default function App() {
 
   // 100% REAL ON-CHAIN REPUTATION LEADERBOARD FETCHING VIA get_all_reputations()
   const fetchLeaderboardFromContract = useCallback(async () => {
-    if (!reputationContractAddress || reputationContractAddress.trim() === '') {
-      setLeaderboard([]);
-      return;
-    }
+    const targetAddr = (reputationContractAddress && reputationContractAddress.trim() !== '') 
+      ? reputationContractAddress 
+      : DEFAULT_REPUTATION_CONTRACT_ADDRESS;
 
     try {
       const client = createClient({
@@ -211,7 +209,7 @@ export default function App() {
 
       const rawJsonString = await client.readContract({
         account: account as any,
-        address: reputationContractAddress as any,
+        address: targetAddr as any,
         functionName: 'get_all_reputations',
         args: []
       });
