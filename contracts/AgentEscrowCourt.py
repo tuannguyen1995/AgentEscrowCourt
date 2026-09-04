@@ -27,8 +27,7 @@ class Contract(gl.Contract):
     platform_admin: str
     reputation_contract: str
     tasks: TreeMap[str, EscrowTask]
-    task_count: bigint
-    task_ids: TreeMap[bigint, str]
+    task_ids_json: str
 
     def __init__(self):
         try:
@@ -36,9 +35,8 @@ class Contract(gl.Contract):
         except Exception:
             self.platform_admin = str(getattr(gl.message, "sender_address", "0x0000000000000000000000000000000000000000")).lower()
         self.reputation_contract = "0x0000000000000000000000000000000000000000"
-        self.tasks = TreeMap[str, EscrowTask]()
-        self.task_count = bigint(0)
-        self.task_ids = TreeMap[bigint, str]()
+        self.task_ids_json = "[]"
+        self.tasks = TreeMap()
 
     def _get_caller(self) -> str:
         try:
@@ -128,8 +126,13 @@ class Contract(gl.Contract):
             payout_ready_at=bigint(0),
             deadline=self._get_current_timestamp() + dur
         )
-        self.task_ids[self.task_count] = task_id
-        self.task_count += bigint(1)
+        try:
+            ids = json.loads(self.task_ids_json)
+        except Exception:
+            ids = []
+        if task_id not in ids:
+            ids.append(task_id)
+            self.task_ids_json = json.dumps(ids)
 
     @gl.public.write.payable
     def accept_task(self, task_id: str) -> None:
@@ -356,9 +359,12 @@ Respond ONLY with valid JSON:
     @gl.public.view
     def get_all_tasks(self) -> str:
         """Authoritative public view for frontend synchronization."""
+        try:
+            ids = json.loads(self.task_ids_json)
+        except Exception:
+            ids = []
         res = []
-        for i in range(int(self.task_count)):
-            tid = self.task_ids[bigint(i)]
+        for tid in ids:
             if tid in self.tasks:
                 t = self.tasks[tid]
                 res.append({
