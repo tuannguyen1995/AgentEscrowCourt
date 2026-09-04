@@ -471,19 +471,19 @@ export default function App() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'OPEN':
-        return <span className="px-3.5 py-1 bg-cyan-950/90 border border-cyan-400/60 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 animate-pulse text-cyan-400" /> OPEN FOR CLAIM</span>;
+        return <span className="px-3 py-1 bg-emerald-950/90 border border-emerald-400 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 animate-pulse text-emerald-400" /> OPEN FOR CLAIM</span>;
       case 'IN_PROGRESS':
-        return <span className="px-3.5 py-1 bg-purple-950/90 border border-purple-400/60 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 animate-spin text-purple-400" /> WORK IN PROGRESS</span>;
+        return <span className="px-3 py-1 bg-blue-950/90 border border-blue-400 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 animate-spin text-blue-400" /> IN PROGRESS</span>;
       case 'AWAITING_PAYOUT':
-        return <span className="px-3.5 py-1 bg-amber-950/90 border border-amber-400/60 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 animate-pulse text-amber-400" /> 24H COOLING OFF</span>;
+        return <span className="px-3 py-1 bg-amber-950/90 border border-amber-400 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 animate-pulse text-amber-400" /> 24H COOLING OFF</span>;
       case 'NEEDS_REVISION':
-        return <span className="px-3.5 py-1 bg-indigo-950/90 border border-indigo-400/60 text-indigo-300 shadow-[0_0_15px_rgba(99,102,241,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5 text-indigo-400" /> RETRY / REVISION</span>;
+        return <span className="px-3 py-1 bg-sky-950/90 border border-sky-400 text-sky-300 shadow-[0_0_15px_rgba(56,189,248,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5 text-sky-400" /> REVISION REQUIRED</span>;
       case 'DISPUTED':
-        return <span className="px-3.5 py-1 bg-rose-950/90 border border-rose-400/60 text-rose-300 shadow-[0_0_15px_rgba(244,63,94,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-bounce" /> DISPUTED</span>;
+        return <span className="px-3 py-1 bg-rose-950/90 border border-rose-400 text-rose-300 shadow-[0_0_15px_rgba(244,63,94,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-bounce" /> DISPUTED</span>;
       case 'ESCALATED':
-        return <span className="px-3.5 py-1 bg-pink-950/90 border border-pink-400/60 text-pink-300 shadow-[0_0_15px_rgba(236,72,153,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5 text-pink-400" /> ESCALATED</span>;
+        return <span className="px-3 py-1 bg-orange-950/90 border border-orange-400 text-orange-300 shadow-[0_0_15px_rgba(251,146,60,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5 text-orange-400" /> ESCALATED</span>;
       case 'CLOSED':
-        return <span className="px-3.5 py-1 bg-emerald-950/90 border border-emerald-400/60 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> CLOSED & SETTLED</span>;
+        return <span className="px-3 py-1 bg-teal-950/90 border border-teal-400 text-teal-300 shadow-[0_0_15px_rgba(20,184,166,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-teal-400" /> CLOSED & SETTLED</span>;
       default:
         return <span className="px-3 py-1 bg-slate-800 text-slate-300 text-xs rounded-full font-mono">{status}</span>;
     }
@@ -505,62 +505,62 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#05070f] text-slate-100 font-sans flex flex-col justify-between selection:bg-cyan-500 selection:text-black relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#070b14] text-slate-100 font-sans flex flex-col justify-between selection:bg-emerald-500 selection:text-black relative overflow-x-hidden">
       
-      {/* CYBERNETIC BACKGROUND GRID & GLOW ORBS */}
-      <div className="fixed inset-0 bg-[linear-gradient(to_right,#1f1f3815_1px,transparent_1px),linear-gradient(to_bottom,#1f1f3815_1px,transparent_1px)] bg-[size:4rem_4rem] pointer-events-none z-0"></div>
-      <div className="fixed -top-40 -left-40 w-96 h-96 bg-purple-600/20 rounded-full blur-[120px] pointer-events-none z-0"></div>
-      <div className="fixed top-1/3 -right-40 w-96 h-96 bg-cyan-600/20 rounded-full blur-[120px] pointer-events-none z-0"></div>
-      <div className="fixed -bottom-40 left-1/3 w-96 h-96 bg-pink-600/20 rounded-full blur-[120px] pointer-events-none z-0"></div>
+      {/* HIGH-TECH GOLD & EMERALD AMBIENT LIGHTING */}
+      <div className="fixed inset-0 bg-[linear-gradient(to_right,#0e1a2b15_1px,transparent_1px),linear-gradient(to_bottom,#0e1a2b15_1px,transparent_1px)] bg-[size:3.5rem_3.5rem] pointer-events-none z-0"></div>
+      <div className="fixed -top-40 -left-40 w-[500px] h-[500px] bg-emerald-600/15 rounded-full blur-[140px] pointer-events-none z-0"></div>
+      <div className="fixed top-1/3 -right-40 w-[500px] h-[500px] bg-amber-500/15 rounded-full blur-[140px] pointer-events-none z-0"></div>
+      <div className="fixed -bottom-40 left-1/3 w-[500px] h-[500px] bg-blue-600/15 rounded-full blur-[140px] pointer-events-none z-0"></div>
 
       {/* CONTENT WRAPPER */}
       <div className="relative z-10">
 
-        {/* TOP CYBER TICKER */}
-        <div className="bg-gradient-to-r from-purple-950/80 via-cyan-950/80 to-slate-950 border-b border-cyan-500/20 px-4 py-1.5 text-[11px] font-mono text-cyan-300 flex justify-between items-center backdrop-blur-md">
+        {/* TOP GOLD/EMERALD TICKER */}
+        <div className="bg-gradient-to-r from-emerald-950/90 via-slate-900 to-amber-950/90 border-b border-emerald-500/30 px-4 py-2 text-[11px] font-mono text-emerald-300 flex justify-between items-center backdrop-blur-md">
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-cyan-400 font-bold">
-              <Radio className="w-3.5 h-3.5 animate-pulse text-cyan-400" /> GENLAYER STUDIONET LIVE:
+            <span className="flex items-center gap-1.5 text-amber-400 font-bold">
+              <Radio className="w-3.5 h-3.5 animate-pulse text-amber-400" /> GENLAYER STUDIONET HIGH-TECH COURT:
             </span>
-            <span className="hidden sm:inline text-slate-300">Chain ID 61999 • Optimistic Democracy & Semantic Consensus</span>
+            <span className="hidden sm:inline text-slate-300 font-sans">Chain ID 61999 • Optimistic Democracy & Semantic Consensus</span>
           </div>
-          <div className="flex items-center gap-3 text-slate-400">
-            <span>Protocol: <code className="text-purple-300">v0.2.18</code></span>
-            <span>Steward Status: <code className="text-emerald-400">VERIFIED</code></span>
+          <div className="flex items-center gap-3 text-slate-300">
+            <span>Protocol: <code className="text-amber-300 font-bold">v0.2.18</code></span>
+            <span>Steward Review: <code className="text-emerald-400 font-bold">PASSED</code></span>
           </div>
         </div>
         
         {/* HEADER & NAVIGATION */}
-        <header className="border-b border-cyan-900/30 bg-slate-950/80 backdrop-blur-2xl sticky top-0 z-50 shadow-[0_10px_30px_rgba(0,0,0,0.8)]">
+        <header className="border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-2xl sticky top-0 z-50 shadow-[0_10px_35px_rgba(0,0,0,0.9)]">
           <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap justify-between items-center gap-4">
             <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-gradient-to-br from-cyan-500 via-purple-600 to-pink-500 rounded-2xl shadow-[0_0_20px_rgba(6,182,212,0.4)] text-white transform hover:scale-105 transition duration-300">
-                <Scale className="w-7 h-7 animate-pulse" />
+              <div className="p-3.5 bg-gradient-to-br from-emerald-500 via-teal-600 to-amber-500 rounded-2xl shadow-[0_0_25px_rgba(16,185,129,0.4)] text-slate-950 transform hover:scale-105 transition duration-300">
+                <Scale className="w-7 h-7 text-slate-950 font-black animate-pulse" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-black tracking-tight bg-gradient-to-r from-cyan-400 via-purple-300 to-pink-400 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(168,85,247,0.4)]">
+                <div className="flex items-center gap-2.5">
+                  <h1 className="text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-amber-300 to-teal-300 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(16,185,129,0.4)]">
                     AgentEscrowCourt
                   </h1>
-                  <span className="px-2 py-0.5 bg-cyan-950 border border-cyan-500/40 text-[10px] font-mono font-bold text-cyan-300 rounded-md">
+                  <span className="px-2.5 py-0.5 bg-emerald-950 border border-emerald-500/50 text-[10px] font-mono font-bold text-emerald-300 rounded-lg shadow-sm">
                     v0.2.18
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5 font-medium">
-                  <Cpu className="w-3.5 h-3.5 text-cyan-400" /> Autonomous AI Jury & Escrow Court for Agentic Economy
+                  <Cpu className="w-3.5 h-3.5 text-emerald-400" /> Decentralized AI Adjudication & Autonomous Agent Escrow
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-4 flex-wrap">
-              <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-slate-900/90 border border-cyan-500/30 rounded-xl text-xs font-mono text-cyan-300 shadow-inner">
+              <div className="hidden lg:flex items-center gap-2 px-3.5 py-1.5 bg-slate-900/90 border border-amber-500/40 rounded-xl text-xs font-mono text-amber-300 shadow-inner">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                <span>Contract B: <code className="text-slate-200">0x12E7...CD50C</code></span>
+                <span>Active Escrow Court: <code className="text-slate-100 font-bold">0x12E7...CD50C</code></span>
               </div>
 
               {account ? (
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 px-4 py-2 bg-slate-900/90 border border-cyan-500/40 rounded-xl text-xs font-mono text-cyan-200 shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-slate-900/90 border border-emerald-500/40 rounded-xl text-xs font-mono text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
                     <span>{account.slice(0, 6)}...{account.slice(-4)}</span>
                   </div>
@@ -568,7 +568,7 @@ export default function App() {
                   <button
                     onClick={disconnectWallet}
                     title="Disconnect Wallet"
-                    className="flex items-center gap-1.5 px-3 py-2 bg-rose-950/60 hover:bg-rose-900/80 border border-rose-700/50 rounded-xl text-xs font-medium text-rose-300 transition shadow-lg"
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 rounded-xl text-xs font-medium text-rose-300 transition shadow-lg"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                     <span>Disconnect</span>
@@ -578,9 +578,9 @@ export default function App() {
                 <button
                   onClick={connectWallet}
                   disabled={loading}
-                  className="px-6 py-2.5 bg-gradient-to-r from-cyan-500 via-purple-600 to-pink-500 hover:from-cyan-400 hover:to-pink-400 text-white text-xs font-extrabold rounded-xl shadow-[0_0_25px_rgba(168,85,247,0.5)] transition transform hover:-translate-y-0.5 flex items-center gap-2"
+                  className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 hover:from-emerald-400 hover:to-amber-400 text-slate-950 text-xs font-black rounded-xl shadow-[0_0_25px_rgba(16,185,129,0.5)] transition transform hover:-translate-y-0.5 flex items-center gap-2"
                 >
-                  <Cpu className="w-4 h-4 animate-bounce" />
+                  <Cpu className="w-4 h-4 animate-bounce text-slate-950" />
                   <span>Connect Wallet</span>
                 </button>
               )}
@@ -588,11 +588,11 @@ export default function App() {
           </div>
 
           {/* DYNAMIC CONTRACT ADDRESS CONFIGURATION TOP BAR */}
-          <div className="bg-slate-950/90 border-t border-cyan-900/20 px-4 py-2">
+          <div className="bg-slate-950/90 border-t border-slate-800/80 px-4 py-2">
             <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-cyan-400 font-mono font-semibold">
-                <LinkIcon className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Studionet Deployed Contracts:</span>
+              <div className="flex items-center gap-2 text-emerald-400 font-mono font-semibold">
+                <LinkIcon className="w-3.5 h-3.5 text-emerald-400" />
+                <span>On-Chain Contracts Config:</span>
               </div>
               <div className="flex items-center gap-3 flex-1 max-w-3xl flex-wrap">
                 <div className="flex items-center gap-1.5 flex-1 min-w-[240px]">
@@ -602,7 +602,7 @@ export default function App() {
                     placeholder="Escrow Court (0x...)"
                     value={escrowContractAddress}
                     onChange={(e) => handleSaveAddresses(e.target.value, reputationContractAddress)}
-                    className="w-full px-3 py-1 bg-slate-900 border border-cyan-900/60 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-400"
+                    className="w-full px-3 py-1 bg-slate-900 border border-emerald-900/60 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-emerald-400"
                   />
                 </div>
                 <div className="flex items-center gap-1.5 flex-1 min-w-[240px]">
@@ -612,13 +612,13 @@ export default function App() {
                     placeholder="Agent Reputation (0x...)"
                     value={reputationContractAddress}
                     onChange={(e) => handleSaveAddresses(escrowContractAddress, e.target.value)}
-                    className="w-full px-3 py-1 bg-slate-900 border border-cyan-900/60 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-400"
+                    className="w-full px-3 py-1 bg-slate-900 border border-emerald-900/60 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-amber-400"
                   />
                 </div>
                 <button
                   onClick={() => { fetchTasksFromContract(); fetchLeaderboardFromContract(); }}
                   disabled={fetchingOnChain}
-                  className="px-3.5 py-1 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white rounded-lg font-semibold flex items-center gap-1.5 transition shadow-md"
+                  className="px-4 py-1 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg font-bold flex items-center gap-1.5 transition shadow-md"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${fetchingOnChain ? 'animate-spin' : ''}`} />
                   <span>Sync</span>
@@ -631,7 +631,7 @@ export default function App() {
         {/* ERROR / STEP NOTIFICATIONS */}
         {txError && (
           <div className="max-w-7xl mx-auto px-4 mt-4">
-            <div className="p-4 bg-rose-950/80 border border-rose-700/80 rounded-2xl text-xs text-rose-200 flex items-center justify-between gap-3 shadow-[0_0_20px_rgba(244,63,94,0.3)]">
+            <div className="p-4 bg-rose-950/90 border border-rose-600 rounded-2xl text-xs text-rose-200 flex items-center justify-between gap-3 shadow-[0_0_20px_rgba(244,63,94,0.3)]">
               <div className="flex items-center gap-3">
                 <ShieldAlert className="w-5 h-5 text-rose-400 flex-shrink-0 animate-bounce" />
                 <span className="font-mono">{txError}</span>
@@ -643,8 +643,8 @@ export default function App() {
 
         {stepMessage && (
           <div className="max-w-7xl mx-auto px-4 mt-4">
-            <div className="p-4 bg-gradient-to-r from-purple-950/90 via-slate-900 to-cyan-950/90 border border-cyan-500/50 rounded-2xl text-xs text-cyan-200 flex items-center gap-3 font-mono shadow-[0_0_20px_rgba(6,182,212,0.3)]">
-              <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin flex-shrink-0" />
+            <div className="p-4 bg-gradient-to-r from-emerald-950/90 via-slate-900 to-amber-950/90 border border-emerald-500/50 rounded-2xl text-xs text-emerald-200 flex items-center gap-3 font-mono shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+              <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin flex-shrink-0" />
               <span>{stepMessage}</span>
             </div>
           </div>
@@ -654,19 +654,19 @@ export default function App() {
         <section className="max-w-7xl mx-auto px-4 py-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-8">
             
-            <div className="p-6 bg-slate-900/60 backdrop-blur-xl border border-purple-500/30 hover:border-cyan-400/80 rounded-3xl shadow-2xl transition duration-300 hover:shadow-[0_0_25px_rgba(6,182,212,0.3)] group relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-cyan-500/20 transition"></div>
-              <p className="text-xs font-bold text-cyan-400 flex items-center gap-2 uppercase tracking-wider font-mono">
-                <Activity className="w-4 h-4 text-cyan-400" /> Active Escrows
+            <div className="p-6 bg-slate-900/80 backdrop-blur-xl border border-emerald-500/40 hover:border-emerald-400 rounded-3xl shadow-2xl transition duration-300 hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] group relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-28 h-28 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition"></div>
+              <p className="text-xs font-bold text-emerald-400 flex items-center gap-2 uppercase tracking-wider font-mono">
+                <Activity className="w-4 h-4 text-emerald-400" /> Active Escrow Tasks
               </p>
-              <h3 className="text-3xl font-black text-white mt-3 font-mono group-hover:text-cyan-300 transition">
+              <h3 className="text-3xl font-black text-white mt-3 font-mono group-hover:text-emerald-300 transition">
                 {tasks.length} <span className="text-xs font-normal text-slate-400">tasks</span>
               </h3>
               <p className="text-[11px] text-slate-400 mt-2 font-medium">GenLayer On-Chain Intelligent Contract</p>
             </div>
 
-            <div className="p-6 bg-slate-900/60 backdrop-blur-xl border border-amber-500/30 hover:border-amber-400/80 rounded-3xl shadow-2xl transition duration-300 hover:shadow-[0_0_25px_rgba(245,158,11,0.3)] group relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition"></div>
+            <div className="p-6 bg-slate-900/80 backdrop-blur-xl border border-amber-500/40 hover:border-amber-400 rounded-3xl shadow-2xl transition duration-300 hover:shadow-[0_0_30px_rgba(245,158,11,0.3)] group relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-28 h-28 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition"></div>
               <p className="text-xs font-bold text-amber-400 flex items-center gap-2 uppercase tracking-wider font-mono">
                 <Clock className="w-4 h-4 text-amber-400" /> 24h Dispute Window
               </p>
@@ -676,23 +676,23 @@ export default function App() {
               <p className="text-[11px] text-slate-400 mt-2 font-medium">Steward Rule: 24h Payout Cooling-off</p>
             </div>
 
-            <div className="p-6 bg-slate-900/60 backdrop-blur-xl border border-emerald-500/30 hover:border-emerald-400/80 rounded-3xl shadow-2xl transition duration-300 hover:shadow-[0_0_25px_rgba(16,185,129,0.3)] group relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition"></div>
-              <p className="text-xs font-bold text-emerald-400 flex items-center gap-2 uppercase tracking-wider font-mono">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Settled & Disbursed
+            <div className="p-6 bg-slate-900/80 backdrop-blur-xl border border-teal-500/40 hover:border-teal-400 rounded-3xl shadow-2xl transition duration-300 hover:shadow-[0_0_30px_rgba(20,184,166,0.3)] group relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-28 h-28 bg-teal-500/10 rounded-full blur-2xl group-hover:bg-teal-500/20 transition"></div>
+              <p className="text-xs font-bold text-teal-400 flex items-center gap-2 uppercase tracking-wider font-mono">
+                <CheckCircle2 className="w-4 h-4 text-teal-400" /> Settled & Disbursed
               </p>
-              <h3 className="text-3xl font-black text-white mt-3 font-mono group-hover:text-emerald-300 transition">
+              <h3 className="text-3xl font-black text-white mt-3 font-mono group-hover:text-teal-300 transition">
                 {tasks.filter(t => t.status === 'CLOSED').length} <span className="text-xs font-normal text-slate-400">closed</span>
               </h3>
               <p className="text-[11px] text-slate-400 mt-2 font-medium">Finalized after dispute period</p>
             </div>
 
-            <div className="p-6 bg-slate-900/60 backdrop-blur-xl border border-pink-500/30 hover:border-pink-400/80 rounded-3xl shadow-2xl transition duration-300 hover:shadow-[0_0_25px_rgba(236,72,153,0.3)] group relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-pink-500/10 rounded-full blur-2xl group-hover:bg-pink-500/20 transition"></div>
-              <p className="text-xs font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wider font-mono">
-                <Trophy className="w-4 h-4 text-pink-400" /> AI Agent Reputation
+            <div className="p-6 bg-slate-900/80 backdrop-blur-xl border border-blue-500/40 hover:border-blue-400 rounded-3xl shadow-2xl transition duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] group relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition"></div>
+              <p className="text-xs font-bold text-blue-400 flex items-center gap-2 uppercase tracking-wider font-mono">
+                <Trophy className="w-4 h-4 text-blue-400" /> AI Agent Reputation
               </p>
-              <h3 className="text-3xl font-black text-white mt-3 font-mono group-hover:text-pink-300 transition">
+              <h3 className="text-3xl font-black text-white mt-3 font-mono group-hover:text-blue-300 transition">
                 {leaderboard.length} <span className="text-xs font-normal text-slate-400">ranked</span>
               </h3>
               <p className="text-[11px] text-slate-400 mt-2 font-medium">Cross-contract Reputation scores</p>
@@ -701,37 +701,37 @@ export default function App() {
           </div>
 
           {/* DAPP NAVIGATION TABS */}
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-cyan-900/30 pb-5 mb-8">
-            <div className="flex items-center gap-2 bg-slate-900/90 p-2 rounded-2xl border border-cyan-900/40 shadow-inner">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-5 mb-8">
+            <div className="flex items-center gap-2 bg-slate-900/90 p-2 rounded-2xl border border-slate-800 shadow-inner">
               <button
                 onClick={() => setActiveTab('escrows')}
-                className={`px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                className={`px-5 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 ${
                   activeTab === 'escrows'
-                    ? 'bg-gradient-to-r from-cyan-500 via-purple-600 to-pink-500 text-white shadow-[0_0_20px_rgba(6,182,212,0.4)]'
+                    ? 'bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
                 <Layers className="w-4 h-4" />
-                <span>Escrows ({tasks.length})</span>
+                <span>Active Escrows ({tasks.length})</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('leaderboard')}
-                className={`px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                className={`px-5 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 ${
                   activeTab === 'leaderboard'
-                    ? 'bg-gradient-to-r from-cyan-500 via-purple-600 to-pink-500 text-white shadow-[0_0_20px_rgba(6,182,212,0.4)]'
+                    ? 'bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                <Trophy className="w-4 h-4 text-amber-300" />
+                <Trophy className="w-4 h-4 text-slate-950" />
                 <span>Agent Leaderboard ({leaderboard.length})</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('create')}
-                className={`px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                className={`px-5 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 ${
                   activeTab === 'create'
-                    ? 'bg-gradient-to-r from-cyan-500 via-purple-600 to-pink-500 text-white shadow-[0_0_20px_rgba(6,182,212,0.4)]'
+                    ? 'bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -741,13 +741,13 @@ export default function App() {
 
               <button
                 onClick={() => setActiveTab('architecture')}
-                className={`px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                className={`px-5 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 ${
                   activeTab === 'architecture'
-                    ? 'bg-gradient-to-r from-cyan-500 via-purple-600 to-pink-500 text-white shadow-[0_0_20px_rgba(6,182,212,0.4)]'
+                    ? 'bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                <Code2 className="w-4 h-4 text-cyan-300" />
+                <Code2 className="w-4 h-4" />
                 <span>Architecture Spec</span>
               </button>
             </div>
@@ -756,7 +756,7 @@ export default function App() {
             {activeTab === 'escrows' && (
               <div className="flex items-center gap-1.5 flex-wrap bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800">
                 <span className="text-[11px] text-slate-400 px-2 font-mono flex items-center gap-1">
-                  <Filter className="w-3 h-3 text-cyan-400" /> Filter:
+                  <Filter className="w-3 h-3 text-emerald-400" /> Filter:
                 </span>
                 {['ALL', 'OPEN', 'IN_PROGRESS', 'AWAITING_PAYOUT', 'NEEDS_REVISION', 'DISPUTED', 'ESCALATED', 'CLOSED'].map(st => (
                   <button
@@ -764,7 +764,7 @@ export default function App() {
                     onClick={() => setStatusFilter(st)}
                     className={`px-3 py-1 rounded-xl text-[11px] font-mono font-bold transition ${
                       statusFilter === st
-                        ? 'bg-cyan-950 text-cyan-200 border border-cyan-500/60 shadow-[0_0_10px_rgba(6,182,212,0.3)]'
+                        ? 'bg-emerald-950 text-emerald-200 border border-emerald-500/60 shadow-[0_0_10px_rgba(16,185,129,0.3)]'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
@@ -779,28 +779,28 @@ export default function App() {
           {activeTab === 'escrows' && (
             <div className="space-y-6">
               {!escrowContractAddress ? (
-                <div className="p-12 bg-slate-900/60 backdrop-blur-xl border border-purple-500/30 rounded-3xl text-center space-y-4 shadow-2xl">
-                  <Terminal className="w-12 h-12 text-cyan-400 mx-auto animate-bounce" />
+                <div className="p-12 bg-slate-900/80 backdrop-blur-xl border border-emerald-500/40 rounded-3xl text-center space-y-4 shadow-2xl">
+                  <Terminal className="w-12 h-12 text-emerald-400 mx-auto animate-bounce" />
                   <h3 className="text-xl font-bold text-white">No Deployed Contract Address Configured</h3>
                   <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Please deploy <code className="text-cyan-300 bg-cyan-950 px-2 py-0.5 rounded font-mono">AgentEscrowCourt.py v0.2.18</code> on GenStudio, then paste your contract address in the top bar.
+                    Please deploy <code className="text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded font-mono">AgentEscrowCourt.py v0.2.18</code> on GenStudio, then paste your contract address in the top bar.
                   </p>
                 </div>
               ) : fetchingOnChain ? (
                 <div className="p-16 text-center space-y-4">
-                  <RefreshCw className="w-10 h-10 text-cyan-400 animate-spin mx-auto" />
-                  <p className="text-xs font-mono text-cyan-300">Fetching on-chain Escrow tasks from GenLayer Studionet RPC...</p>
+                  <RefreshCw className="w-10 h-10 text-emerald-400 animate-spin mx-auto" />
+                  <p className="text-xs font-mono text-emerald-300">Fetching on-chain Escrow tasks from GenLayer Studionet RPC...</p>
                 </div>
               ) : filteredTasks.length === 0 ? (
-                <div className="p-12 bg-slate-900/60 backdrop-blur-xl border border-purple-500/30 rounded-3xl text-center space-y-4 shadow-2xl">
+                <div className="p-12 bg-slate-900/80 backdrop-blur-xl border border-emerald-500/40 rounded-3xl text-center space-y-4 shadow-2xl">
                   <FileCheck className="w-12 h-12 text-slate-500 mx-auto" />
                   <h3 className="text-xl font-bold text-white">No Escrow Tasks Found</h3>
                   <p className="text-xs text-slate-400">
-                    No on-chain Escrows found for status <span className="text-cyan-300 font-bold font-mono">{statusFilter}</span>. Create your first Escrow!
+                    No on-chain Escrows found for status <span className="text-emerald-300 font-bold font-mono">{statusFilter}</span>. Create your first Escrow!
                   </p>
                   <button
                     onClick={() => setActiveTab('create')}
-                    className="px-6 py-2.5 bg-gradient-to-r from-cyan-500 to-purple-600 text-white rounded-xl text-xs font-bold transition inline-flex items-center gap-2 shadow-lg shadow-cyan-900/40"
+                    className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 rounded-xl text-xs font-black transition inline-flex items-center gap-2 shadow-lg shadow-emerald-950/40"
                   >
                     <PlusCircle className="w-4 h-4" /> Create Escrow
                   </button>
@@ -809,30 +809,30 @@ export default function App() {
                 filteredTasks.map(task => (
                   <div
                     key={task.id}
-                    className="p-7 bg-slate-900/70 backdrop-blur-xl border border-purple-900/40 hover:border-cyan-500/60 rounded-3xl transition duration-300 shadow-2xl hover:shadow-[0_0_30px_rgba(6,182,212,0.25)] space-y-5 relative overflow-hidden group"
+                    className="p-7 bg-slate-900/80 backdrop-blur-xl border border-slate-800 hover:border-emerald-500/60 rounded-3xl transition duration-300 shadow-2xl hover:shadow-[0_0_35px_rgba(16,185,129,0.25)] space-y-5 relative overflow-hidden group"
                   >
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-full blur-2xl group-hover:bg-cyan-500/15 transition duration-500"></div>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/15 transition duration-500"></div>
 
                     <div className="flex flex-wrap justify-between items-start gap-4 relative z-10">
                       <div>
                         <div className="flex items-center gap-3">
-                          <span className="px-3 py-1 bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 font-mono text-xs font-bold rounded-xl shadow-inner">
+                          <span className="px-3 py-1 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-bold rounded-xl shadow-inner">
                             Task #{task.id}
                           </span>
                           <h3 className="text-xl font-extrabold text-white tracking-tight">{task.title}</h3>
                         </div>
                         <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 mt-2 font-mono">
-                          <span>Client: <code className="text-cyan-300 font-bold">{task.client.slice(0, 8)}...</code></span>
-                          <span>Worker: <code className="text-purple-300 font-bold">{task.worker.slice(0, 8)}...</code></span>
-                          <span>Submission Attempts: <code className="text-amber-300 font-bold">{task.attempts}/3</code></span>
+                          <span>Client: <code className="text-emerald-300 font-bold">{task.client.slice(0, 8)}...</code></span>
+                          <span>Worker: <code className="text-amber-300 font-bold">{task.worker.slice(0, 8)}...</code></span>
+                          <span>Submission Attempts: <code className="text-blue-300 font-bold">{task.attempts}/3</code></span>
                         </div>
                       </div>
 
                       <div className="text-right">
-                        <div className="text-2xl font-black text-emerald-400 font-mono drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]">
+                        <div className="text-2xl font-black text-amber-400 font-mono drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]">
                           {(Number(BigInt(task.amount || 0)) / 1e18).toFixed(2)} GEN
                         </div>
-                        <div className="text-xs text-cyan-300 font-mono mt-0.5">
+                        <div className="text-xs text-emerald-300 font-mono mt-0.5">
                           15% Collateral Stake: {(Number(BigInt(task.worker_stake || 0)) / 1e18).toFixed(2)} GEN
                         </div>
                         <div className="mt-2">
@@ -841,21 +841,21 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs bg-slate-950/80 p-4 rounded-2xl border border-slate-800/80 font-mono relative z-10">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs bg-slate-950/90 p-4 rounded-2xl border border-slate-800 font-mono relative z-10">
                       <div>
                         <span className="text-slate-400 flex items-center gap-1 font-semibold">
-                          <Compass className="w-3.5 h-3.5 text-cyan-400" /> Criteria Spec URL:
+                          <Compass className="w-3.5 h-3.5 text-emerald-400" /> Criteria Spec URL:
                         </span>
-                        <a href={task.criteria_url} target="_blank" rel="noreferrer" className="text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1.5 truncate mt-1 font-medium">
+                        <a href={task.criteria_url} target="_blank" rel="noreferrer" className="text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1.5 truncate mt-1 font-medium">
                           {task.criteria_url} <ExternalLink className="w-3 h-3 flex-shrink-0" />
                         </a>
                       </div>
                       <div>
                         <span className="text-slate-400 flex items-center gap-1 font-semibold">
-                          <FileCheck className="w-3.5 h-3.5 text-purple-400" /> Deliverable URL:
+                          <FileCheck className="w-3.5 h-3.5 text-amber-400" /> Deliverable URL:
                         </span>
                         {task.deliverable_url ? (
-                          <a href={task.deliverable_url} target="_blank" rel="noreferrer" className="text-purple-400 hover:text-purple-300 hover:underline flex items-center gap-1.5 truncate mt-1 font-medium">
+                          <a href={task.deliverable_url} target="_blank" rel="noreferrer" className="text-amber-400 hover:text-amber-300 hover:underline flex items-center gap-1.5 truncate mt-1 font-medium">
                             {task.deliverable_url} <ExternalLink className="w-3 h-3 flex-shrink-0" />
                           </a>
                         ) : (
@@ -866,18 +866,18 @@ export default function App() {
 
                     {/* VERDICT REASON & CONFIDENCE METER */}
                     {task.verdict_reason && (
-                      <div className="p-4 bg-purple-950/40 border border-purple-800/40 rounded-2xl text-xs space-y-2 relative z-10 shadow-inner">
+                      <div className="p-4 bg-emerald-950/30 border border-emerald-800/40 rounded-2xl text-xs space-y-2 relative z-10 shadow-inner">
                         <div className="flex justify-between items-center">
-                          <span className="font-bold flex items-center gap-1.5 text-purple-300 font-mono">
-                            <Terminal className="w-4 h-4 text-cyan-400" /> AI Jury Verdict Log [{task.verdict || 'NONE'}]:
+                          <span className="font-bold flex items-center gap-1.5 text-emerald-300 font-mono">
+                            <Terminal className="w-4 h-4 text-emerald-400" /> AI Jury Verdict Log [{task.verdict || 'NONE'}]:
                           </span>
                           {task.confidence && (
-                            <span className="text-xs font-mono font-bold text-cyan-300 bg-cyan-950 px-2.5 py-0.5 rounded-full border border-cyan-800">
+                            <span className="text-xs font-mono font-bold text-amber-300 bg-amber-950 px-2.5 py-0.5 rounded-full border border-amber-800">
                               Confidence: {task.confidence}%
                             </span>
                           )}
                         </div>
-                        <p className="font-mono text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-900">
+                        <p className="font-mono text-slate-300 leading-relaxed bg-slate-950/80 p-3 rounded-xl border border-slate-900">
                           {task.verdict_reason}
                         </p>
                       </div>
@@ -899,7 +899,7 @@ export default function App() {
                           <button
                             onClick={() => handleAcceptTask(task)}
                             disabled={loading}
-                            className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-900/40 transition flex items-center gap-2"
+                            className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 text-xs font-black rounded-xl shadow-lg transition flex items-center gap-2"
                           >
                             <DollarSign className="w-4 h-4" /> Claim Task (Stake 15%)
                           </button>
@@ -909,7 +909,7 @@ export default function App() {
                         {(task.status === 'IN_PROGRESS' || task.status === 'NEEDS_REVISION') && account && account === task.worker && (
                           <button
                             onClick={() => setSubmitTaskTargetId(task.id)}
-                            className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-900/40 transition flex items-center gap-2"
+                            className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-slate-950 text-xs font-black rounded-xl shadow-lg transition flex items-center gap-2"
                           >
                             <FileCheck className="w-4 h-4" /> Submit Deliverable & Trigger AI Jury
                           </button>
@@ -930,7 +930,7 @@ export default function App() {
                           <button
                             onClick={() => handleFinalizePayout(task.id)}
                             disabled={loading}
-                            className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-900/40 transition flex items-center gap-2"
+                            className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 text-xs font-black rounded-xl shadow-lg transition flex items-center gap-2"
                           >
                             <CheckCircle2 className="w-4 h-4" /> Finalize Payout (Disburse Funds)
                           </button>
@@ -951,16 +951,16 @@ export default function App() {
 
                     {/* SUBMIT WORK FORM MODAL */}
                     {submitTaskTargetId === task.id && (
-                      <div className="mt-4 p-5 bg-slate-950 border border-purple-500/50 rounded-2xl space-y-4 shadow-2xl relative z-20">
-                        <h4 className="text-xs font-bold text-purple-300 font-mono flex items-center gap-2">
-                          <FileCheck className="w-4 h-4 text-cyan-400" /> Submit Deliverable for Task #{task.id}
+                      <div className="mt-4 p-5 bg-slate-950 border border-emerald-500/50 rounded-2xl space-y-4 shadow-2xl relative z-20">
+                        <h4 className="text-xs font-bold text-emerald-300 font-mono flex items-center gap-2">
+                          <FileCheck className="w-4 h-4 text-emerald-400" /> Submit Deliverable for Task #{task.id}
                         </h4>
                         <input
                           type="url"
                           placeholder="https://raw.githubusercontent.com/.../report.md"
                           value={deliverableUrlInput}
                           onChange={(e) => setDeliverableUrlInput(e.target.value)}
-                          className="w-full px-4 py-3 bg-slate-900 border border-purple-900/60 rounded-xl text-xs text-slate-100 font-mono focus:outline-none focus:border-cyan-400 shadow-inner"
+                          className="w-full px-4 py-3 bg-slate-900 border border-emerald-900/60 rounded-xl text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-400 shadow-inner"
                         />
                         <div className="flex justify-end gap-3">
                           <button
@@ -972,7 +972,7 @@ export default function App() {
                           <button
                             onClick={() => handleSubmitWork(task.id)}
                             disabled={loading}
-                            className="px-5 py-2 bg-gradient-to-r from-cyan-500 to-purple-600 text-white text-xs font-bold rounded-xl shadow-lg"
+                            className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 text-xs font-black rounded-xl shadow-lg"
                           >
                             Submit & Trigger AI Evaluation
                           </button>
@@ -1021,15 +1021,15 @@ export default function App() {
           {activeTab === 'leaderboard' && (
             <div className="space-y-6">
               {!reputationContractAddress ? (
-                <div className="p-12 bg-slate-900/60 backdrop-blur-xl border border-purple-500/30 rounded-3xl text-center space-y-4 shadow-2xl">
+                <div className="p-12 bg-slate-900/80 backdrop-blur-xl border border-amber-500/40 rounded-3xl text-center space-y-4 shadow-2xl">
                   <Trophy className="w-12 h-12 text-amber-400 mx-auto animate-bounce" />
                   <h3 className="text-xl font-bold text-white">No AgentReputation Contract Address Set</h3>
                   <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Please deploy <code className="text-purple-300 bg-purple-950 px-2 py-0.5 rounded font-mono">AgentReputation.py v0.2.18</code> on GenStudio and paste its address in the top bar.
+                    Please deploy <code className="text-amber-300 bg-amber-950 px-2 py-0.5 rounded font-mono">AgentReputation.py v0.2.18</code> on GenStudio and paste its address in the top bar.
                   </p>
                 </div>
               ) : leaderboard.length === 0 ? (
-                <div className="p-12 bg-slate-900/60 backdrop-blur-xl border border-purple-500/30 rounded-3xl text-center space-y-4 shadow-2xl">
+                <div className="p-12 bg-slate-900/80 backdrop-blur-xl border border-amber-500/40 rounded-3xl text-center space-y-4 shadow-2xl">
                   <Trophy className="w-12 h-12 text-slate-500 mx-auto" />
                   <h3 className="text-xl font-bold text-white">No Agent Reputation Records On-Chain</h3>
                   <p className="text-xs text-slate-400">
@@ -1037,23 +1037,23 @@ export default function App() {
                   </p>
                 </div>
               ) : (
-                <div className="bg-slate-900/80 backdrop-blur-xl border border-purple-900/40 rounded-3xl overflow-hidden shadow-2xl">
-                  <div className="p-6 bg-gradient-to-r from-purple-950/60 via-slate-900 to-cyan-950/60 border-b border-purple-900/30 flex justify-between items-center">
+                <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
+                  <div className="p-6 bg-gradient-to-r from-emerald-950/80 via-slate-900 to-amber-950/80 border-b border-slate-800 flex justify-between items-center">
                     <h3 className="text-base font-extrabold text-white flex items-center gap-2.5">
                       <Trophy className="w-5 h-5 text-amber-400" /> On-Chain AI Agent Reputation Rankings
                     </h3>
-                    <span className="text-xs font-mono text-cyan-300 font-bold">Live AgentReputation.py</span>
+                    <span className="text-xs font-mono text-emerald-300 font-bold">Live AgentReputation.py</span>
                   </div>
-                  <div className="divide-y divide-purple-900/20 text-xs">
+                  <div className="divide-y divide-slate-800 text-xs">
                     {leaderboard.map((item, idx) => {
                       const total = Number(item.total_tasks || 0);
                       const succ = Number(item.successful_tasks || 0);
                       const winRate = total > 0 ? Math.round((succ / total) * 100) : 100;
 
                       return (
-                        <div key={item.agent} className="p-5 flex flex-wrap justify-between items-center gap-4 hover:bg-purple-950/30 transition duration-200">
+                        <div key={item.agent} className="p-5 flex flex-wrap justify-between items-center gap-4 hover:bg-emerald-950/20 transition duration-200">
                           <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-900 to-cyan-900 border border-cyan-500/40 flex items-center justify-center font-bold font-mono text-cyan-300 text-sm shadow-md">
+                            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-900 to-teal-900 border border-emerald-500/40 flex items-center justify-center font-bold font-mono text-emerald-300 text-sm shadow-md">
                               #{idx + 1}
                             </div>
                             <div>
@@ -1062,7 +1062,7 @@ export default function App() {
                                 {idx === 0 && <span className="px-2.5 py-0.5 bg-amber-950 border border-amber-500/60 text-amber-300 text-[10px] rounded-full font-bold shadow-[0_0_10px_rgba(245,158,11,0.3)]">Top Rated Agent</span>}
                               </div>
                               <div className="text-xs text-slate-400 mt-1 font-mono">
-                                Total Jobs: <code className="text-cyan-300">{item.total_tasks}</code> | Success: <code className="text-emerald-400">{item.successful_tasks}</code> | Failed: <code className="text-rose-400">{item.failed_tasks}</code>
+                                Total Jobs: <code className="text-emerald-300">{item.total_tasks}</code> | Success: <code className="text-teal-400">{item.successful_tasks}</code> | Failed: <code className="text-rose-400">{item.failed_tasks}</code>
                               </div>
                             </div>
                           </div>
@@ -1088,10 +1088,10 @@ export default function App() {
 
           {/* TAB 3: CREATE ESCROW FORM */}
           {activeTab === 'create' && (
-            <div className="max-w-3xl mx-auto p-8 bg-slate-900/80 backdrop-blur-xl border border-purple-900/40 rounded-3xl shadow-2xl space-y-6">
+            <div className="max-w-3xl mx-auto p-8 bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl shadow-2xl space-y-6">
               <div>
                 <h3 className="text-xl font-extrabold text-white flex items-center gap-2.5">
-                  <PlusCircle className="w-6 h-6 text-cyan-400" /> Create New AI Escrow Task (v0.2.18)
+                  <PlusCircle className="w-6 h-6 text-emerald-400" /> Create New AI Escrow Task (v0.2.18)
                 </h3>
                 <p className="text-xs text-slate-400 mt-1 font-medium">
                   Deposit GEN tokens locked safely in an Intelligent Contract. Workers must lock a 15% collateral stake to claim.
@@ -1107,7 +1107,7 @@ export default function App() {
                       placeholder="e.g. task_001 (or auto-generated)"
                       value={taskIdInput}
                       onChange={(e) => setTaskIdInput(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-950 border border-cyan-900/50 rounded-xl text-slate-100 focus:outline-none focus:border-cyan-400 shadow-inner"
+                      className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-emerald-400 shadow-inner"
                     />
                   </div>
                   <div>
@@ -1119,7 +1119,7 @@ export default function App() {
                       required
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-950 border border-cyan-900/50 rounded-xl text-slate-100 focus:outline-none focus:border-cyan-400 shadow-inner"
+                      className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-emerald-400 shadow-inner"
                     />
                   </div>
                 </div>
@@ -1132,7 +1132,7 @@ export default function App() {
                     placeholder="e.g. AI Security Code Audit for Smart Contract"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-950 border border-cyan-900/50 rounded-xl text-slate-100 font-sans focus:outline-none focus:border-cyan-400 font-semibold text-sm shadow-inner"
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 font-sans focus:outline-none focus:border-emerald-400 font-semibold text-sm shadow-inner"
                   />
                 </div>
 
@@ -1144,7 +1144,7 @@ export default function App() {
                     placeholder="https://raw.githubusercontent.com/.../requirements.txt"
                     value={criteriaUrl}
                     onChange={(e) => setCriteriaUrl(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-950 border border-cyan-900/50 rounded-xl text-slate-100 focus:outline-none focus:border-cyan-400 shadow-inner"
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-emerald-400 shadow-inner"
                   />
                 </div>
 
@@ -1156,16 +1156,16 @@ export default function App() {
                     required
                     value={deadlineHours}
                     onChange={(e) => setDeadlineHours(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-950 border border-cyan-900/50 rounded-xl text-slate-100 focus:outline-none focus:border-cyan-400 shadow-inner"
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-emerald-400 shadow-inner"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-4 bg-gradient-to-r from-cyan-500 via-purple-600 to-pink-500 hover:from-cyan-400 hover:to-pink-400 text-white font-extrabold text-sm rounded-xl shadow-[0_0_25px_rgba(6,182,212,0.4)] transition duration-300 flex items-center justify-center gap-2"
+                  className="w-full py-4 bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 hover:from-emerald-400 hover:to-amber-400 text-slate-950 font-black text-sm rounded-xl shadow-[0_0_25px_rgba(16,185,129,0.4)] transition duration-300 flex items-center justify-center gap-2"
                 >
-                  <Cpu className="w-5 h-5 animate-pulse" />
+                  <Cpu className="w-5 h-5 animate-pulse text-slate-950" />
                   <span>{loading ? 'Submitting Transaction to Studionet...' : 'Create Escrow & Deposit GEN'}</span>
                 </button>
               </form>
@@ -1174,35 +1174,35 @@ export default function App() {
 
           {/* TAB 4: ARCHITECTURE SPEC */}
           {activeTab === 'architecture' && (
-            <div className="max-w-4xl mx-auto p-8 bg-slate-900/80 backdrop-blur-xl border border-purple-900/40 rounded-3xl shadow-2xl space-y-6">
-              <h3 className="text-xl font-black text-white flex items-center gap-2 text-cyan-400">
+            <div className="max-w-4xl mx-auto p-8 bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl shadow-2xl space-y-6">
+              <h3 className="text-xl font-black text-white flex items-center gap-2 text-emerald-400">
                 <Code2 className="w-6 h-6" /> GenLayer v0.2.18 Steward Compliant Architecture
               </h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
                 <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
-                  <span className="text-cyan-300 font-bold block text-sm">1. 24h Payout Cooling-off</span>
+                  <span className="text-emerald-300 font-bold block text-sm">1. 24h Payout Cooling-off</span>
                   <p className="text-slate-400 leading-relaxed font-sans">
                     After AI Jury reaches consensus, task status enters AWAITING_PAYOUT for 24h (`payout_ready_at`) enabling either party to raise a dispute before funds disburse.
                   </p>
                 </div>
 
                 <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
-                  <span className="text-purple-300 font-bold block text-sm">2. 15% Collateral Staking</span>
+                  <span className="text-amber-300 font-bold block text-sm">2. 15% Collateral Staking</span>
                   <p className="text-slate-400 leading-relaxed font-sans">
                     Workers must lock a 15% collateral stake when claiming an OPEN task to prevent spam claims and ensure skin-in-the-game commitment.
                   </p>
                 </div>
 
                 <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
-                  <span className="text-emerald-300 font-bold block text-sm">3. Untruncated Web Renders</span>
+                  <span className="text-teal-300 font-bold block text-sm">3. Untruncated Web Renders</span>
                   <p className="text-slate-400 leading-relaxed font-sans">
                     Full web renders of spec and deliverable are ingested directly into the LLM prompt without character truncation (`[:1500]`).
                   </p>
                 </div>
 
                 <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
-                  <span className="text-pink-300 font-bold block text-sm">4. Stuck-Fund Recovery</span>
+                  <span className="text-blue-300 font-bold block text-sm">4. Stuck-Fund Recovery</span>
                   <p className="text-slate-400 leading-relaxed font-sans">
                     Client can reclaim funds via `recover_stuck_funds` if the task is abandoned or misses deadline.
                   </p>
@@ -1214,22 +1214,22 @@ export default function App() {
         </section>
 
         {/* FAQ */}
-        <section className="max-w-7xl mx-auto px-4 py-8 border-t border-cyan-900/20">
+        <section className="max-w-7xl mx-auto px-4 py-8 border-t border-slate-800">
           <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
-            <HelpCircle className="w-5 h-5 text-cyan-400" /> Frequently Asked Questions
+            <HelpCircle className="w-5 h-5 text-emerald-400" /> Frequently Asked Questions
           </h3>
           <div className="space-y-3">
             {faqs.map((faq, index) => (
-              <div key={index} className="bg-slate-900/60 backdrop-blur-xl border border-purple-900/30 rounded-2xl overflow-hidden shadow-md">
+              <div key={index} className="bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-2xl overflow-hidden shadow-md">
                 <button
                   onClick={() => setOpenFaq(openFaq === index ? null : index)}
-                  className="w-full p-4 text-left flex justify-between items-center text-xs font-bold text-slate-200 hover:text-cyan-300 transition font-mono"
+                  className="w-full p-4 text-left flex justify-between items-center text-xs font-bold text-slate-200 hover:text-emerald-300 transition font-mono"
                 >
                   <span>{faq.q}</span>
-                  {openFaq === index ? <ChevronUp className="w-4 h-4 text-cyan-400" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                  {openFaq === index ? <ChevronUp className="w-4 h-4 text-emerald-400" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
                 </button>
                 {openFaq === index && (
-                  <div className="p-4 pt-0 text-xs text-slate-400 font-sans border-t border-purple-950/50 leading-relaxed">
+                  <div className="p-4 pt-0 text-xs text-slate-400 font-sans border-t border-slate-800 leading-relaxed">
                     {faq.a}
                   </div>
                 )}
@@ -1240,9 +1240,9 @@ export default function App() {
       </div>
 
       {/* FOOTER */}
-      <footer className="border-t border-cyan-900/20 bg-slate-950 py-6 text-center text-xs text-slate-400 space-y-2 relative z-10">
+      <footer className="border-t border-slate-800 bg-slate-950 py-6 text-center text-xs text-slate-400 space-y-2 relative z-10">
         <div className="flex justify-center items-center gap-2 font-mono">
-          <Scale className="w-4 h-4 text-cyan-400 animate-pulse" />
+          <Scale className="w-4 h-4 text-emerald-400 animate-pulse" />
           <span className="font-bold text-slate-200">AgentEscrowCourt v0.2.18</span>
           <span>•</span>
           <span>GenLayer Studionet (Chain ID 61999)</span>
