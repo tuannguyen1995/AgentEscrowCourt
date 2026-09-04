@@ -44,6 +44,13 @@ declare global {
   }
 }
 
+// Polyfill native BigInt serialization for JSON.stringify in web3 / genlayer-js
+try {
+  (BigInt.prototype as any).toJSON = function () {
+    return this.toString();
+  };
+} catch (_) {}
+
 interface EscrowTask {
   id: string;
   client: string;
@@ -288,7 +295,7 @@ export default function App() {
         account: account as any,
         address: escrowContractAddress as any,
         functionName: 'create_escrow',
-        args: [tid, title, criteriaUrl, criteriaHash || "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", BigInt(deadlineHours)],
+        args: [tid, title, criteriaUrl, criteriaHash || "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", parseInt(deadlineHours || '72', 10)],
         value: weiAmount
       });
 
