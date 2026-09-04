@@ -77,10 +77,12 @@ export default function App() {
 
   // Contract Addresses (stored in localStorage or from env)
   const [escrowContractAddress, setEscrowContractAddress] = useState<string>(() => {
-    return localStorage.getItem('escrow_contract_addr') || DEFAULT_ESCROW_CONTRACT_ADDRESS;
+    const saved = localStorage.getItem('escrow_contract_addr');
+    return (saved && saved.trim().length > 10) ? saved.trim() : DEFAULT_ESCROW_CONTRACT_ADDRESS;
   });
   const [reputationContractAddress, setReputationContractAddress] = useState<string>(() => {
-    return localStorage.getItem('reputation_contract_addr') || DEFAULT_REPUTATION_CONTRACT_ADDRESS;
+    const saved = localStorage.getItem('reputation_contract_addr');
+    return (saved && saved.trim().length > 10) ? saved.trim() : DEFAULT_REPUTATION_CONTRACT_ADDRESS;
   });
 
   const [tasks, setTasks] = useState<EscrowTask[]>([]);
@@ -158,6 +160,40 @@ export default function App() {
     setAccount(null);
   };
 
+  // SAFE ON-CHAIN JSON PARSER (HANDLES RAW STRINGS & HEX RESPONSES)
+  const safeParseOnChainJson = useCallback(<T,>(rawInput: any): T[] => {
+    if (!rawInput) return [];
+    if (Array.isArray(rawInput)) return rawInput;
+    if (typeof rawInput === 'object') return [];
+
+    let str = String(rawInput).trim();
+    if (str.startsWith('0x')) {
+      try {
+        const hex = str.slice(2);
+        let bytes = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < hex.length; i += 2) {
+          bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+        }
+        str = new TextDecoder('utf-8').decode(bytes).trim();
+      } catch {
+        return [];
+      }
+    }
+
+    const firstBracket = str.indexOf('[');
+    const lastBracket = str.lastIndexOf(']');
+    if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+      str = str.substring(firstBracket, lastBracket + 1);
+    }
+
+    try {
+      const res = JSON.parse(str);
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  }, []);
+
   // 100% REAL ON-CHAIN TASK FETCHING VIA get_all_tasks()
   const fetchTasksFromContract = useCallback(async () => {
     if (!escrowContractAddress || escrowContractAddress.trim() === '') {
@@ -180,19 +216,16 @@ export default function App() {
         args: []
       });
 
-      if (rawJsonString) {
-        const parsed: EscrowTask[] = typeof rawJsonString === 'string' ? JSON.parse(rawJsonString) : rawJsonString;
-        setTasks(parsed.reverse());
-      } else {
-        setTasks([]);
-      }
+      const parsed = safeParseOnChainJson<EscrowTask>(rawJsonString);
+      setTasks(parsed.reverse());
     } catch (err: any) {
       console.error("Failed to read tasks on-chain:", err);
-      setTxError("Unable to fetch tasks from contract address. Make sure contract is deployed on Studionet.");
+      // Clean fallback without intrusive top error banner
+      setTasks([]);
     } finally {
       setFetchingOnChain(false);
     }
-  }, [escrowContractAddress, account]);
+  }, [escrowContractAddress, account, safeParseOnChainJson]);
 
   // 100% REAL ON-CHAIN REPUTATION LEADERBOARD FETCHING VIA get_all_reputations()
   const fetchLeaderboardFromContract = useCallback(async () => {
@@ -214,17 +247,14 @@ export default function App() {
         args: []
       });
 
-      if (rawJsonString) {
-        const parsed: AgentReputationRecord[] = typeof rawJsonString === 'string' ? JSON.parse(rawJsonString) : rawJsonString;
-        parsed.sort((a, b) => Number(b.score) - Number(a.score));
-        setLeaderboard(parsed);
-      } else {
-        setLeaderboard([]);
-      }
+      const parsed = safeParseOnChainJson<AgentReputationRecord>(rawJsonString);
+      parsed.sort((a, b) => Number(b.score) - Number(a.score));
+      setLeaderboard(parsed);
     } catch (err: any) {
       console.error("Failed to read reputation leaderboard on-chain:", err);
+      setLeaderboard([]);
     }
-  }, [reputationContractAddress, account]);
+  }, [reputationContractAddress, account, safeParseOnChainJson]);
 
   useEffect(() => {
     fetchTasksFromContract();
