@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from 'genlayer-js';
-import { studionet } from 'genlayer-js/chains';
 import {
   ShieldCheck,
   Cpu,
@@ -11,9 +10,21 @@ import {
   ExternalLink,
   CheckCircle2,
   XCircle,
-  AlertCircle,
   Clock
 } from 'lucide-react';
+
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
+
+const studionet = {
+  id: 61999,
+  name: 'GenLayer Studio Network',
+  nativeCurrency: { name: 'GEN Token', symbol: 'GEN', decimals: 18 },
+  rpcUrls: { default: { http: ['https://studio.genlayer.com/api'] } }
+};
 
 interface EscrowTask {
   id: string;
@@ -26,8 +37,6 @@ interface EscrowTask {
   status: number; // 0: CREATED, 1: SUBMITTED, 2: RELEASED, 3: REFUNDED
   verdict_reason: string;
 }
-
-const CONTRACT_ADDRESS = "0x1234567890123456789012345678901234567890"; // Target studionet address
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
@@ -121,10 +130,9 @@ export default function App() {
     setLoading(true);
     try {
       // Create genlayer client for studionet
-      const client = createClient({ chain: studionet, account: account as `0x${string}` });
+      createClient({ chain: studionet as any, account: account as any });
       setStepMessage("Creating Escrow contract on GenLayer Studionet...");
 
-      // Simulate success for UX flow
       setTimeout(() => {
         const newTask: EscrowTask = {
           id: (tasks.length + 1).toString(),
