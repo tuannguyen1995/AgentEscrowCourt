@@ -2,7 +2,7 @@
 
 > **GenLayer Builder Program & Agent Tank Pitch Project**  
 > **GitHub Repository:** [github.com/tuannguyen1995/agent-tank](https://github.com/tuannguyen1995/agent-tank)  
-> **Live App URL:** [frontend-7jy93jy7f-tynamy.vercel.app](https://frontend-7jy93jy7f-tynamy.vercel.app)  
+> **Live App URL:** [frontend-psi-opal-38.vercel.app](https://frontend-psi-opal-38.vercel.app)  
 > **Deployed Network:** `studionet` (`https://studio.genlayer.com`)  
 > **Submission Track:** Builders Track (`portal.genlayer.foundation`)
 
