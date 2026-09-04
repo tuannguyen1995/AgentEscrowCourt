@@ -160,6 +160,40 @@ export default function App() {
     setAccount(null);
   };
 
+  // Safe helper to parse raw RPC JSON / Hex string results
+  const parseOnChainResult = <T,>(raw: any): T[] => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed === '0x' || trimmed === '[]') return [];
+
+      // 1. Direct JSON parse
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (_) {}
+
+      // 2. Decode hex string if starts with 0x
+      if (trimmed.startsWith('0x')) {
+        try {
+          const hex = trimmed.slice(2);
+          let str = '';
+          for (let i = 0; i < hex.length; i += 2) {
+            const code = parseInt(hex.substring(i, i + 2), 16);
+            if (code >= 32 && code <= 126) str += String.fromCharCode(code);
+          }
+          const cleanStr = str.trim();
+          if (cleanStr.startsWith('[') && cleanStr.endsWith(']')) {
+            const parsed = JSON.parse(cleanStr);
+            if (Array.isArray(parsed)) return parsed;
+          }
+        } catch (_) {}
+      }
+    }
+    return [];
+  };
+
   // 100% REAL ON-CHAIN TASK FETCHING VIA get_all_tasks()
   const fetchTasksFromContract = useCallback(async () => {
     const targetAddr = (escrowContractAddress && escrowContractAddress.trim() !== '') 
@@ -180,15 +214,11 @@ export default function App() {
         args: []
       });
 
-      if (rawJsonString) {
-        const parsed: EscrowTask[] = typeof rawJsonString === 'string' ? JSON.parse(rawJsonString) : rawJsonString;
-        setTasks(parsed.reverse());
-      } else {
-        setTasks([]);
-      }
+      const parsed = parseOnChainResult<EscrowTask>(rawJsonString);
+      setTasks(parsed.reverse());
     } catch (err: any) {
       console.error("Failed to read tasks on-chain:", err);
-      setTxError("Unable to fetch tasks from contract address. Make sure contract is deployed on Studionet.");
+      setTasks([]);
     } finally {
       setFetchingOnChain(false);
     }
@@ -212,15 +242,12 @@ export default function App() {
         args: []
       });
 
-      if (rawJsonString) {
-        const parsed: AgentReputationRecord[] = typeof rawJsonString === 'string' ? JSON.parse(rawJsonString) : rawJsonString;
-        parsed.sort((a, b) => Number(b.score) - Number(a.score));
-        setLeaderboard(parsed);
-      } else {
-        setLeaderboard([]);
-      }
+      const parsed = parseOnChainResult<AgentReputationRecord>(rawJsonString);
+      parsed.sort((a, b) => Number(b.score) - Number(a.score));
+      setLeaderboard(parsed);
     } catch (err: any) {
       console.error("Failed to read reputation leaderboard on-chain:", err);
+      setLeaderboard([]);
     }
   }, [reputationContractAddress, account]);
 
