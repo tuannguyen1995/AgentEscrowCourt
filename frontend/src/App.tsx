@@ -873,6 +873,11 @@ export default function App() {
                         <a href={task.criteria_url} target="_blank" rel="noreferrer" className="text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1.5 truncate mt-1 font-medium">
                           {task.criteria_url} <ExternalLink className="w-3 h-3 flex-shrink-0" />
                         </a>
+                        {task.criteria_hash && (
+                          <div className="mt-1 text-[10px] text-amber-300/80 truncate">
+                            SHA-256: <code className="text-amber-300">{task.criteria_hash.slice(0, 18)}...</code>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <span className="text-slate-400 flex items-center gap-1 font-semibold">
@@ -1170,6 +1175,21 @@ export default function App() {
                     onChange={(e) => setCriteriaUrl(e.target.value)}
                     className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-emerald-400 shadow-inner"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1.5 font-sans">Criteria SHA-256 Hash (Steward Cryptographic Proof Pinning)</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                    value={criteriaHash}
+                    onChange={(e) => setCriteriaHash(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-emerald-300 font-mono focus:outline-none focus:border-amber-400 shadow-inner"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1 font-sans">
+                    Ensures criteria spec immutability. Validator nodes verify SHA-256 hash before LLM evaluation.
+                  </p>
                 </div>
 
                 <div>
