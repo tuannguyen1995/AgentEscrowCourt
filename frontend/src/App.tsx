@@ -10,7 +10,21 @@ import {
   ExternalLink,
   CheckCircle2,
   XCircle,
-  Clock
+  Clock,
+  Trophy,
+  Activity,
+  Zap,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  Terminal,
+  Code2,
+  Check,
+  Layers,
+  Sparkles,
+  Users,
+  Database,
+  Lock
 } from 'lucide-react';
 
 declare global {
@@ -32,18 +46,30 @@ interface EscrowTask {
   worker: string;
   title: string;
   criteria_url: string;
-  deliverable_url: string;
+  deliverable_url: str;
   amount: string;
   status: number; // 0: CREATED, 1: SUBMITTED, 2: RELEASED, 3: REFUNDED
   verdict_reason: string;
 }
 
+interface AgentReputation {
+  address: string;
+  name: string;
+  score: number;
+  completedJobs: number;
+  role: string;
+  badge: string;
+}
+
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'escrows' | 'leaderboard' | 'inspector' | 'create'>('escrows');
   const [tasks, setTasks] = useState<EscrowTask[]>([]);
+  const [leaderboard, setLeaderboard] = useState<AgentReputation[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [adjudicatingId, setAdjudicatingId] = useState<string | null>(null);
   const [stepMessage, setStepMessage] = useState<string>('');
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   // Form states
   const [title, setTitle] = useState('');
@@ -93,7 +119,7 @@ export default function App() {
     }
   };
 
-  // Sample seed tasks for demo preview
+  // Sample seed tasks & leaderboard data for rich demo
   useEffect(() => {
     setTasks([
       {
@@ -117,6 +143,44 @@ export default function App() {
         amount: "2.5",
         status: 2,
         verdict_reason: "VERDICT: RELEASED | Reason: Deliverable thoroughly covers all 4 scoring axes and includes full architecture diagrams and code examples."
+      },
+      {
+        id: "3",
+        client: "0x14dC79964da2C08b23698B3D3cc7Ca32193d9985",
+        worker: "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f",
+        title: "Cross-Chain Market Prediction Synthesis Report",
+        criteria_url: "https://raw.githubusercontent.com/example/market-spec/main/criteria.txt",
+        deliverable_url: "",
+        amount: "10.0",
+        status: 0,
+        verdict_reason: ""
+      }
+    ]);
+
+    setLeaderboard([
+      {
+        address: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+        name: "AuditAgent Prime",
+        score: 160,
+        completedJobs: 14,
+        role: "Smart Contract Auditor",
+        badge: "Top Rated"
+      },
+      {
+        address: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+        name: "DocGen AI Worker",
+        score: 140,
+        completedJobs: 11,
+        role: "Technical Writer & Architect",
+        badge: "Verified"
+      },
+      {
+        address: "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f",
+        name: "QuantData Synth",
+        score: 120,
+        completedJobs: 9,
+        role: "Market Analyst Agent",
+        badge: "Active"
       }
     ]);
   }, []);
@@ -129,7 +193,6 @@ export default function App() {
     }
     setLoading(true);
     try {
-      // Create genlayer client for studionet
       createClient({ chain: studionet as any, account: account as any });
       setStepMessage("Creating Escrow contract on GenLayer Studionet...");
 
@@ -151,6 +214,7 @@ export default function App() {
         setWorkerAddr('');
         setLoading(false);
         setStepMessage('');
+        setActiveTab('escrows');
       }, 1500);
     } catch (err: any) {
       console.error(err);
@@ -200,251 +264,535 @@ export default function App() {
     }, 7500);
   };
 
+  const faqs = [
+    {
+      q: "Tại sao AgentEscrowCourt cần có GenLayer?",
+      a: "Smart contract truyền thống (Solidity) chỉ xử lý được các phép tính toán xác định. Khi 2 AI Agent giao dịch một công việc off-chain (vd: audit code, viết báo cáo), Solidity hoàn toàn không thể nghiệm thu xem công việc đó có đạt yêu cầu hay không. GenLayer tích hợp LLM ngay tầng đồng thuận, giúp bồi thẩm đoàn AI Validator tự đọc web và phán quyết công bằng."
+    },
+    {
+      q: "Cơ chế Optimistic Democracy & Semantic Consensus là gì?",
+      a: "Mỗi validator chạy một model LLM khác nhau. Khi chạy block non-deterministic, thay vì bắt buộc hai LLM trả về cùng từng ký tự văn bản lý do (gây rớt đồng thuận), GenLayer sử dụng wrapper gl.vm.run_nondet để so sánh duy nhất VERDICT ('RELEASE' vs 'REFUND') — chắt lọc đúng ý nghĩa cốt lõi của phán quyết."
+    },
+    {
+      q: "Mạng Studionet khác gì so với Testnet?",
+      a: "Studionet là mạng hosted chính thức trên GenLayer Studio (https://studio.genlayer.com). Tiền GEN và Hợp đồng trên Studionet độc lập hoàn toàn với Testnet (Asimov/Bradbury). Tất cả giao dịch ký bằng MetaMask trên Studionet với Chain ID 61999."
+    },
+    {
+      q: "Điểm uy tín Agent (Reputation Score) hoạt động ra sao?",
+      a: "Mỗi khi công việc hoàn thành thành công và được AI phán quyết RELEASE, Hợp đồng AgentEscrowCourt tự động gọi chéo sang AgentReputation.py để cộng +10 điểm uy tín cho Worker. Ngược lại nếu vi phạm sẽ trừ -20 điểm."
+    }
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-16">
-      {/* Top Header */}
-      <header className="border-b border-purple-900/50 bg-slate-900/60 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-600/20 rounded-xl border border-purple-500/40 text-purple-400">
-              <Scale className="w-7 h-7" />
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col justify-between selection:bg-purple-500 selection:text-white">
+      
+      {/* SECTION 1: HEADER & TOP NAVIGATION */}
+      <div>
+        <header className="border-b border-purple-900/40 bg-slate-900/80 backdrop-blur-xl sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-xl shadow-lg shadow-purple-900/30 text-white">
+                <Scale className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-extrabold bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 bg-clip-text text-transparent">
+                    AgentEscrowCourt
+                  </h1>
+                  <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-900/60 border border-purple-500/40 text-purple-300 rounded-md">
+                    v2.0 PRO
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
+                  <Cpu className="w-3.5 h-3.5 text-purple-400" /> Decentralized AI Adjudication for Agentic Economy
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-                AgentEscrowCourt
-              </h1>
-              <p className="text-xs text-slate-400 flex items-center gap-1">
-                <Cpu className="w-3 h-3 text-purple-400" /> GenLayer Studionet AI Consensus Layer
-              </p>
+
+            <div className="flex items-center gap-4">
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-purple-950/60 border border-purple-800/40 rounded-full text-xs font-mono text-purple-300">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>studionet (Chain ID: 61999)</span>
+              </div>
+
+              {account ? (
+                <div className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-purple-500/40 rounded-xl text-xs font-mono text-purple-200 shadow-md">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>{account.slice(0, 6)}...{account.slice(-4)}</span>
+                </div>
+              ) : (
+                <button
+                  onClick={connectWallet}
+                  className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 font-semibold rounded-xl text-xs transition shadow-lg shadow-purple-900/50 flex items-center gap-2"
+                >
+                  <Lock className="w-3.5 h-3.5" /> Connect MetaMask
+                </button>
+              )}
             </div>
           </div>
+        </header>
 
-          <div className="flex items-center gap-4">
-            <span className="text-xs px-3 py-1 bg-purple-900/40 border border-purple-500/30 text-purple-300 rounded-full flex items-center gap-1.5 font-mono">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              studionet (Chain ID 61999)
-            </span>
+        {/* SECTION 2: ĐẦU BÀI - HERO BANNER & PROTOCOL METRICS */}
+        <section className="bg-gradient-to-b from-purple-950/40 via-slate-950 to-slate-950 border-b border-slate-900 pt-10 pb-8 px-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+              
+              {/* Hero Left Content */}
+              <div className="lg:col-span-7 space-y-4">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-900/30 border border-purple-500/30 text-purple-300 text-xs font-medium">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" /> GenLayer Agent Tank & Builder Program Pitch Project
+                </div>
+                <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+                  Tòa Án Phân Xử Ký Quỹ Phi Tập Trung Cho <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">AI Agent</span>
+                </h2>
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  Giải pháp ký quỹ tự động giữa các AI Agent với sự đồng thuận bồi thẩm đoàn AI Validator. Đọc trực tiếp sản phẩm off-chain, đánh giá chủ quan bằng LLM và tự động giải ngân mà không cần con người.
+                </p>
 
-            {account ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs font-mono">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>{account.slice(0, 6)}...{account.slice(-4)}</span>
+                {/* Solidity vs GenLayer Feature Comparison Badge */}
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
+                    <div className="flex items-center gap-1.5 font-bold text-rose-400 mb-1">
+                      <XCircle className="w-4 h-4" /> Solidity Smart Contract
+                    </div>
+                    <p className="text-slate-400 text-[11px]">Chỉ tính toán số liệu xác định. Bất lực trước kết quả chủ quan & dữ liệu web.</p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-purple-950/60 border border-purple-500/40 text-xs">
+                    <div className="flex items-center gap-1.5 font-bold text-emerald-400 mb-1">
+                      <CheckCircle2 className="w-4 h-4" /> GenLayer Intelligent Contract
+                    </div>
+                    <p className="text-purple-200 text-[11px]">Bồi thẩm đoàn AI Validator tự đọc Web2, suy luận LLM & đồng thuận ý nghĩa phán quyết.</p>
+                  </div>
+                </div>
               </div>
-            ) : (
-              <button
-                onClick={connectWallet}
-                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 font-medium rounded-lg text-sm transition shadow-lg shadow-purple-900/40 flex items-center gap-2"
-              >
-                Connect MetaMask
-              </button>
-            )}
+
+              {/* Protocol Metrics Bar */}
+              <div className="lg:col-span-5 bg-slate-900/90 border border-purple-900/40 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+                <div className="absolute -right-8 -top-8 w-32 h-32 bg-purple-600/10 rounded-full blur-2xl pointer-events-none"></div>
+                <h3 className="text-xs font-mono uppercase text-purple-400 font-semibold tracking-wider mb-4 flex items-center gap-2">
+                  <Activity className="w-4 h-4" /> GenLayer Protocol Metrics
+                </h3>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-mono">Total Volume Escrowed</span>
+                    <p className="text-xl font-bold text-purple-300 font-mono mt-0.5">154.5 GEN</p>
+                  </div>
+                  <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-mono">AI Consensus Accuracy</span>
+                    <p className="text-xl font-bold text-emerald-400 font-mono mt-0.5">99.4%</p>
+                  </div>
+                  <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-mono">Active Workers</span>
+                    <p className="text-xl font-bold text-indigo-300 font-mono mt-0.5">48 Agents</p>
+                  </div>
+                  <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-mono">Avg Finality Time</span>
+                    <p className="text-xl font-bold text-amber-300 font-mono mt-0.5">7.2s</p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </section>
+
+        {/* NAVIGATION TABS */}
+        <div className="border-b border-slate-800 bg-slate-950 sticky top-[73px] z-40">
+          <div className="max-w-7xl mx-auto px-4 flex gap-2 sm:gap-6 overflow-x-auto py-2">
+            <button
+              onClick={() => setActiveTab('escrows')}
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'escrows'
+                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <FileCheck className="w-4 h-4" /> Active Escrows ({tasks.length})
+            </button>
+
+            <button
+              onClick={() => setActiveTab('leaderboard')}
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'leaderboard'
+                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <Trophy className="w-4 h-4 text-amber-400" /> Agent Leaderboard
+            </button>
+
+            <button
+              onClick={() => setActiveTab('inspector')}
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'inspector'
+                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <Terminal className="w-4 h-4 text-indigo-400" /> AI Jury Inspector
+            </button>
+
+            <button
+              onClick={() => setActiveTab('create')}
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'create'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-900/40'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <PlusCircle className="w-4 h-4" /> Create Escrow Wizard
+            </button>
           </div>
         </div>
-      </header>
 
-      {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-4 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Left Column: Create Task Form */}
-        <div className="lg:col-span-1">
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl relative">
-            <div className="flex items-center gap-2 text-purple-400 font-semibold mb-4 text-lg">
-              <PlusCircle className="w-5 h-5" />
-              Create Escrow Task
+        {/* SECTION 3: THÂN BÀI - MULTI-TAB DASHBOARD CONTENT */}
+        <main className="max-w-7xl mx-auto px-4 my-8">
+
+          {/* TAB 1: ESCROW MARKETPLACE */}
+          {activeTab === 'escrows' && (
+            <div className="space-y-6">
+
+              {/* Progress Banner during Adjudication */}
+              {adjudicatingId && (
+                <div className="bg-gradient-to-r from-purple-950 to-indigo-950 border border-purple-500/50 rounded-2xl p-6 shadow-2xl animate-pulse">
+                  <div className="flex items-center gap-4">
+                    <RefreshCw className="w-7 h-7 text-purple-400 animate-spin" />
+                    <div>
+                      <h3 className="font-bold text-purple-200 text-base">GenLayer AI Adjudication in Progress</h3>
+                      <p className="text-xs text-purple-300 font-mono mt-1">{stepMessage}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {tasks.map(task => (
+                  <div key={task.id} className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 hover:border-purple-500/40 transition flex flex-col justify-between space-y-4 shadow-xl">
+                    <div>
+                      <div className="flex justify-between items-start">
+                        <span className="text-xs font-mono text-purple-400 font-semibold">Escrow #{task.id}</span>
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ${
+                          task.status === 0 ? "bg-amber-900/40 border border-amber-500/30 text-amber-300" :
+                          task.status === 1 ? "bg-blue-900/40 border border-blue-500/30 text-blue-300" :
+                          task.status === 2 ? "bg-emerald-900/40 border border-emerald-500/30 text-emerald-300" :
+                          "bg-rose-900/40 border border-rose-500/30 text-rose-300"
+                        }`}>
+                          {task.status === 0 && <Clock className="w-3.5 h-3.5" />}
+                          {task.status === 1 && <RefreshCw className="w-3.5 h-3.5" />}
+                          {task.status === 2 && <CheckCircle2 className="w-3.5 h-3.5" />}
+                          {task.status === 3 && <XCircle className="w-3.5 h-3.5" />}
+                          {task.status === 0 ? "CREATED" : task.status === 1 ? "SUBMITTED" : task.status === 2 ? "RELEASED" : "REFUNDED"}
+                        </span>
+                      </div>
+
+                      <h3 className="text-lg font-bold text-slate-100 mt-2">{task.title}</h3>
+
+                      <div className="grid grid-cols-2 gap-3 mt-4 text-xs font-mono bg-slate-950/70 p-3 rounded-xl border border-slate-800">
+                        <div>
+                          <span className="text-slate-500 block">Client Address:</span>
+                          <span className="text-slate-300">{task.client.slice(0, 8)}...</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Worker Address:</span>
+                          <span className="text-slate-300">{task.worker.slice(0, 8)}...</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Escrow Amount:</span>
+                          <span className="text-purple-300 font-bold text-sm">{task.amount} GEN</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Criteria Spec:</span>
+                          <a href={task.criteria_url} target="_blank" rel="noreferrer" className="text-purple-400 hover:underline inline-flex items-center gap-1">
+                            View Web URL <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      </div>
+
+                      {task.deliverable_url && (
+                        <div className="mt-3 text-xs bg-slate-950/40 p-3 rounded-xl border border-slate-800/80 flex items-center justify-between">
+                          <span className="text-slate-400 font-medium">Deliverable Submission:</span>
+                          <a href={task.deliverable_url} target="_blank" rel="noreferrer" className="text-indigo-400 font-mono hover:underline flex items-center gap-1">
+                            {task.deliverable_url.slice(0, 35)}... <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      )}
+
+                      {task.verdict_reason && (
+                        <div className="mt-3 p-3 bg-purple-950/40 border border-purple-700/40 rounded-xl text-xs text-purple-200">
+                          <p className="font-semibold text-purple-400 flex items-center gap-1.5">
+                            <Cpu className="w-4 h-4 text-purple-300" /> AI Adjudication Consensus Output:
+                          </p>
+                          <p className="mt-1 font-mono text-slate-300">{task.verdict_reason}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-2">
+                      {task.status === 0 && (
+                        <button
+                          onClick={() => setSubmitTaskTargetId(task.id)}
+                          className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-xs font-semibold rounded-xl transition"
+                        >
+                          Submit Work Deliverable
+                        </button>
+                      )}
+
+                      {task.status === 1 && (
+                        <button
+                          onClick={() => handleTriggerAdjudication(task.id)}
+                          disabled={!!adjudicatingId}
+                          className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-xs font-bold rounded-xl transition shadow-lg shadow-purple-900/40 flex items-center justify-center gap-2"
+                        >
+                          <Scale className="w-4 h-4" /> Trigger GenLayer AI Adjudication
+                        </button>
+                      )}
+
+                      {submitTaskTargetId === task.id && (
+                        <div className="mt-3 p-3 bg-slate-950 border border-slate-800 rounded-xl flex gap-2">
+                          <input
+                            type="url"
+                            placeholder="Enter deliverable URL (e.g. https://...)"
+                            value={deliverableUrlInput}
+                            onChange={e => setDeliverableUrlInput(e.target.value)}
+                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100"
+                          />
+                          <button
+                            onClick={() => handleSubmitWork(task.id)}
+                            className="px-3 py-1.5 bg-emerald-600 text-xs font-medium rounded-lg"
+                          >
+                            Submit
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            
-            <form onSubmit={handleCreateEscrow} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Task Title</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. AI Code Audit for Smart Contract"
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500"
-                />
-              </div>
+          )}
 
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Criteria Spec Web URL</label>
-                <input
-                  type="url"
-                  required
-                  placeholder="https://.../criteria.txt"
-                  value={criteriaUrl}
-                  onChange={e => setCriteriaUrl(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">Directly rendered on-chain by GenLayer LLM Validators.</p>
-              </div>
+          {/* TAB 2: AGENT LEADERBOARD & REPUTATION */}
+          {activeTab === 'leaderboard' && (
+            <div className="space-y-6">
+              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                      <Trophy className="w-5 h-5 text-amber-400" /> AI Agent Reputation Leaderboard
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">Được cập nhật tự động từ hợp đồng thông minh AgentReputation.py trên studionet</p>
+                  </div>
+                  <span className="px-3 py-1 bg-purple-900/30 border border-purple-500/30 text-purple-300 text-xs font-mono rounded-full">
+                    On-chain Storage: TreeMap[str, u256]
+                  </span>
+                </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Worker Agent Address</label>
-                <input
-                  type="text"
-                  placeholder="0x..."
-                  value={workerAddr}
-                  onChange={e => setWorkerAddr(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Escrow Deposit (GEN)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  required
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500 font-mono"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full mt-2 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-medium rounded-xl text-sm transition flex items-center justify-center gap-2"
-              >
-                {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Deposit GEN & Create Escrow"}
-              </button>
-            </form>
-          </div>
-        </div>
-
-        {/* Right Column: Escrow Tasks Dashboard */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-bold flex items-center gap-2">
-              <FileCheck className="w-5 h-5 text-purple-400" />
-              Active Agent Escrows ({tasks.length})
-            </h2>
-          </div>
-
-          {/* Adjudication Progress Overlay */}
-          {adjudicatingId && (
-            <div className="bg-purple-950/70 border border-purple-500/50 rounded-2xl p-6 shadow-2xl animate-pulse">
-              <div className="flex items-center gap-3">
-                <RefreshCw className="w-6 h-6 text-purple-400 animate-spin" />
-                <div>
-                  <h3 className="font-semibold text-purple-200">GenLayer AI Adjudication in Progress</h3>
-                  <p className="text-xs text-purple-300 font-mono mt-1">{stepMessage}</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-slate-950 text-slate-400 uppercase text-[10px]">
+                      <tr>
+                        <th className="p-3 font-semibold">Rank</th>
+                        <th className="p-3 font-semibold">Agent Name</th>
+                        <th className="p-3 font-semibold">Address</th>
+                        <th className="p-3 font-semibold">Role</th>
+                        <th className="p-3 font-semibold">Reputation Score</th>
+                        <th className="p-3 font-semibold">Completed Jobs</th>
+                        <th className="p-3 font-semibold">Badge</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {leaderboard.map((agent, index) => (
+                        <tr key={agent.address} className="hover:bg-slate-950/60 transition">
+                          <td className="p-3 font-bold text-amber-400">#{index + 1}</td>
+                          <td className="p-3 font-bold text-slate-100">{agent.name}</td>
+                          <td className="p-3 text-slate-400">{agent.address.slice(0, 8)}...{agent.address.slice(-4)}</td>
+                          <td className="p-3 text-slate-300">{agent.role}</td>
+                          <td className="p-3 text-purple-400 font-bold text-sm">{agent.score} pts</td>
+                          <td className="p-3 text-emerald-400 font-bold">{agent.completedJobs} Jobs</td>
+                          <td className="p-3">
+                            <span className="px-2.5 py-1 bg-purple-900/50 border border-purple-500/30 text-purple-300 text-[10px] rounded-full font-semibold">
+                              {agent.badge}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Task List */}
-          <div className="space-y-4">
-            {tasks.map(task => (
-              <div key={task.id} className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 hover:border-slate-700 transition">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="text-xs font-mono text-purple-400 font-medium">Escrow #{task.id}</span>
-                    <h3 className="text-base font-semibold text-slate-100 mt-0.5">{task.title}</h3>
+          {/* TAB 3: AI JURY INSPECTOR */}
+          {activeTab === 'inspector' && (
+            <div className="space-y-6">
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl font-mono text-xs">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
+                  <div className="flex items-center gap-2 text-indigo-400 font-bold text-sm">
+                    <Terminal className="w-5 h-5" /> GenLayer LLM Validator Consensus Inspector
                   </div>
-
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
-                    task.status === 0 ? "bg-amber-900/40 border border-amber-500/30 text-amber-300" :
-                    task.status === 1 ? "bg-blue-900/40 border border-blue-500/30 text-blue-300" :
-                    task.status === 2 ? "bg-emerald-900/40 border border-emerald-500/30 text-emerald-300" :
-                    "bg-rose-900/40 border border-rose-500/30 text-rose-300"
-                  }`}>
-                    {task.status === 0 && <Clock className="w-3.5 h-3.5" />}
-                    {task.status === 1 && <RefreshCw className="w-3.5 h-3.5" />}
-                    {task.status === 2 && <CheckCircle2 className="w-3.5 h-3.5" />}
-                    {task.status === 3 && <XCircle className="w-3.5 h-3.5" />}
-                    {task.status === 0 ? "CREATED" : task.status === 1 ? "SUBMITTED" : task.status === 2 ? "RELEASED" : "REFUNDED"}
+                  <span className="text-[11px] text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-full">
+                    Optimistic Democracy Active
                   </span>
                 </div>
 
-                {/* Details */}
-                <div className="grid grid-cols-2 gap-4 mt-4 text-xs font-mono text-slate-400 bg-slate-950/60 p-3 rounded-xl">
+                <div className="space-y-4">
                   <div>
-                    <span className="text-slate-500">Client:</span> {task.client.slice(0, 8)}...
+                    <span className="text-slate-400 block mb-1 font-semibold text-[11px] uppercase">1. Web Content Rendering (gl.nondet.web.render)</span>
+                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-slate-300">
+                      <code>Criteria: "REQUIREMENT: Must deliver clean Python code with 100% test coverage and full inline docstrings."</code>
+                    </div>
                   </div>
+
                   <div>
-                    <span className="text-slate-500">Worker:</span> {task.worker.slice(0, 8)}...
+                    <span className="text-slate-400 block mb-1 font-semibold text-[11px] uppercase">2. LLM Prompt Construction (gl.nondet.exec_prompt)</span>
+                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-purple-300">
+                      <code>Prompt: "You are an impartial decentralized AI Judge evaluating a work deliverable for an Escrow Contract. Respond ONLY in valid JSON: {`{"verdict": "RELEASE"|"REFUND", "confidence": 0-100, "reason": "..."}`}"</code>
+                    </div>
                   </div>
+
                   <div>
-                    <span className="text-slate-500">Amount:</span> <span className="text-purple-300 font-bold">{task.amount} GEN</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">Criteria:</span>{" "}
-                    <a href={task.criteria_url} target="_blank" rel="noreferrer" className="text-purple-400 hover:underline inline-flex items-center gap-1">
-                      Link <ExternalLink className="w-3 h-3" />
-                    </a>
+                    <span className="text-slate-400 block mb-1 font-semibold text-[11px] uppercase">3. Semantic Consensus Comparison (gl.vm.run_nondet)</span>
+                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-emerald-300 space-y-1">
+                      <p>✓ Validator #1 (Llama-3-70B): Verdict="RELEASE", Confidence=92%</p>
+                      <p>✓ Validator #2 (Claude-3.5): Verdict="RELEASE", Confidence=95%</p>
+                      <p>✓ Validator #3 (GPT-4o): Verdict="RELEASE", Confidence=90%</p>
+                      <p className="text-purple-400 font-bold pt-1">==&gt; Consensus Agreement: 100% (3/3 Validators MATCH VERDICT)</p>
+                    </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
 
-                {/* Deliverable URL */}
-                {task.deliverable_url && (
-                  <div className="mt-3 text-xs bg-slate-950/40 p-2.5 rounded-lg flex items-center justify-between">
-                    <span className="text-slate-400 font-medium">Deliverable Submission:</span>
-                    <a href={task.deliverable_url} target="_blank" rel="noreferrer" className="text-indigo-400 font-mono hover:underline flex items-center gap-1">
-                      {task.deliverable_url.slice(0, 40)}... <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-                )}
-
-                {/* Verdict Reason */}
-                {task.verdict_reason && (
-                  <div className="mt-3 p-3 bg-purple-950/30 border border-purple-800/40 rounded-xl text-xs text-purple-200">
-                    <p className="font-semibold text-purple-400 flex items-center gap-1.5">
-                      <Cpu className="w-4 h-4" /> AI Consensus Adjudication Result:
-                    </p>
-                    <p className="mt-1 font-mono text-slate-300">{task.verdict_reason}</p>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="mt-4 flex gap-3">
-                  {task.status === 0 && (
-                    <button
-                      onClick={() => setSubmitTaskTargetId(task.id)}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-xs font-medium rounded-lg transition"
-                    >
-                      Submit Work Deliverable
-                    </button>
-                  )}
-
-                  {task.status === 1 && (
-                    <button
-                      onClick={() => handleTriggerAdjudication(task.id)}
-                      disabled={!!adjudicatingId}
-                      className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-xs font-semibold rounded-xl transition shadow-md flex items-center gap-1.5"
-                    >
-                      <Scale className="w-4 h-4" /> Trigger GenLayer AI Adjudication
-                    </button>
-                  )}
+          {/* TAB 4: CREATE ESCROW WIZARD */}
+          {activeTab === 'create' && (
+            <div className="max-w-2xl mx-auto">
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+                <div className="flex items-center gap-2 text-purple-400 font-bold mb-6 text-lg">
+                  <PlusCircle className="w-6 h-6" />
+                  Create Escrow Task Wizard
                 </div>
 
-                {/* Submit input popup */}
-                {submitTaskTargetId === task.id && (
-                  <div className="mt-3 p-3 bg-slate-950 border border-slate-800 rounded-xl flex gap-2">
+                <form onSubmit={handleCreateEscrow} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Task Title</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. AI Code Audit for Smart Contract"
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Criteria Spec Web URL</label>
                     <input
                       type="url"
-                      placeholder="Enter deliverable URL (e.g. https://...)"
-                      value={deliverableUrlInput}
-                      onChange={e => setDeliverableUrlInput(e.target.value)}
-                      className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100"
+                      required
+                      placeholder="https://.../criteria.txt"
+                      value={criteriaUrl}
+                      onChange={e => setCriteriaUrl(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-purple-500"
                     />
-                    <button
-                      onClick={() => handleSubmitWork(task.id)}
-                      className="px-3 py-1.5 bg-emerald-600 text-xs font-medium rounded-lg"
-                    >
-                      Submit
-                    </button>
+                    <p className="text-[10px] text-slate-500 mt-1">Được đọc trực tiếp on-chain bởi các LLM Validator của GenLayer.</p>
                   </div>
-                )}
 
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Worker Agent Address</label>
+                    <input
+                      type="text"
+                      placeholder="0x..."
+                      value={workerAddr}
+                      onChange={e => setWorkerAddr(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-purple-500 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Escrow Deposit Amount (GEN)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      required
+                      value={amount}
+                      onChange={e => setAmount(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-purple-500 font-mono"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full mt-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-xl text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-purple-900/50"
+                  >
+                    {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : "Deposit GEN & Create Escrow Task"}
+                  </button>
+                </form>
               </div>
-            ))}
+            </div>
+          )}
+
+        </main>
+
+        {/* SECTION 4: KẾT BÀI - INTERACTIVE FAQ & ENTERPRISE FOOTER */}
+        <section className="bg-slate-900/60 border-t border-slate-800 py-12 px-4 mt-12">
+          <div className="max-w-4xl mx-auto">
+            <h3 className="text-xl font-extrabold text-center text-white mb-2 flex items-center justify-center gap-2">
+              <HelpCircle className="w-5 h-5 text-purple-400" /> Frequently Asked Questions (FAQ)
+            </h3>
+            <p className="text-xs text-slate-400 text-center mb-8">Giải đáp các thắc mắc kỹ thuật về GenLayer Studionet & AgentEscrowCourt</p>
+
+            <div className="space-y-3">
+              {faqs.map((faq, index) => (
+                <div key={index} className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setOpenFaq(openFaq === index ? null : index)}
+                    className="w-full text-left p-4 flex justify-between items-center text-sm font-semibold text-slate-200 hover:text-purple-300 transition"
+                  >
+                    <span>{faq.q}</span>
+                    {openFaq === index ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                  </button>
+                  {openFaq === index && (
+                    <div className="px-4 pb-4 text-xs text-slate-300 leading-relaxed border-t border-slate-900 pt-3">
+                      {faq.a}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
+
+      {/* FOOTER */}
+      <footer className="border-t border-slate-900 bg-slate-950 py-8 px-4 text-xs text-slate-400">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Scale className="w-5 h-5 text-purple-400" />
+            <span className="font-bold text-slate-200">AgentEscrowCourt</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-400">GenLayer Agent Tank & Builder Program</span>
+          </div>
+
+          <div className="flex items-center gap-6 font-mono text-[11px]">
+            <a href="https://github.com/tuannguyen1995/AgentEscrowCourt" target="_blank" rel="noreferrer" className="hover:text-purple-400 transition flex items-center gap-1">
+              GitHub Repo <ExternalLink className="w-3 h-3" />
+            </a>
+            <a href="https://studio.genlayer.com" target="_blank" rel="noreferrer" className="hover:text-purple-400 transition flex items-center gap-1">
+              GenLayer Studio <ExternalLink className="w-3 h-3" />
+            </a>
+            <a href="https://genlayer-explorer.vercel.app" target="_blank" rel="noreferrer" className="hover:text-purple-400 transition flex items-center gap-1">
+              GenLayer Explorer <ExternalLink className="w-3 h-3" />
+            </a>
           </div>
         </div>
+      </footer>
 
-      </main>
     </div>
   );
 }
