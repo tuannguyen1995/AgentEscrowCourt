@@ -1,6 +1,7 @@
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 from genlayer import *
 from dataclasses import dataclass
+import json
 
 @allow_storage
 @dataclass
@@ -12,7 +13,8 @@ class EscrowTask:
     criteria_url: str
     deliverable_url: str
     amount: bigint
-    status: u8  # 0: CREATED, 1: SUBMITTED, 2: RELEASED, 3: REFUNDED
+    status: u8  # 0: CREATED, 1: SUBMITTED, 2: RELEASED, 3: REFUNDED, 4: RETRY
+    attempts: u256  # Track submission attempts (Max 3)
     verdict_reason: str
 
 class Contract(gl.Contract):
@@ -52,6 +54,7 @@ class Contract(gl.Contract):
             deliverable_url="",
             amount=gl.message.value,
             status=u8(0),
+            attempts=u256(0),
             verdict_reason=""
         )
 
@@ -65,12 +68,16 @@ class Contract(gl.Contract):
             raise UserError("Escrow task not found")
 
         task = self.tasks[id_str]
-        if task.status != u8(0):
-            raise UserError("Task is not in CREATED state")
+        if task.status not in [u8(0), u8(4)]: # CREATED or RETRY
+            raise UserError("Task is not in CREATED or RETRY state")
         if gl.message.sender != task.worker and gl.message.sender != task.client:
-            raise UserError("Only worker or client can submit deliverable")
+            raise UserError("Only assigned worker or client can submit deliverable")
         if len(deliverable_url) == 0:
             raise UserError("Deliverable URL cannot be empty")
+
+        task.attempts = task.attempts + u256(1)
+        if task.attempts > u256(3):
+            raise UserError("Maximum 3 deliverable attempts reached for this task")
 
         task.deliverable_url = deliverable_url
         task.status = u8(1)  # SUBMITTED
@@ -84,35 +91,79 @@ class Contract(gl.Contract):
 
         task = self.tasks[id_str]
         if task.status != u8(1):
-            raise UserError("Task is not ready for adjudication (must be SUBMITTED)")
+            raise UserError("Task is not in SUBMITTED state")
 
-        # Extract values BEFORE nondet block closure
+        # Extract state variables BEFORE non-deterministic closure
         criteria_url = task.criteria_url
         deliverable_url = task.deliverable_url
         task_title = task.title
         amount = task.amount
         client = task.client
         worker = task.worker
+        current_attempt = task.attempts
+
+        # 🔒 Dynamic Canary Token Defense against Prompt Injection (from DeliverableCourt/GrantAuditor)
+        import hashlib
+        canary_token = hashlib.sha256(f"court_{id_str}_{_addr_to_str(worker)}_{str(current_attempt)}".encode()).hexdigest()[:16]
+
+        def is_unusable_render(text: str) -> bool:
+            if not text or not text.strip():
+                return True
+            low = text.lower()
+            error_keywords = [
+                "404 not found", "error 404", "fetch failure", "network error",
+                "unable to render", "connection refused", "500 internal server error"
+            ]
+            for kw in error_keywords:
+                if kw in low:
+                    return True
+            return False
 
         def leader_fn():
-            # 1. Fetch criteria and deliverable directly on-chain via GenLayer web render
-            criteria_text = gl.nondet.web.render(criteria_url, mode="text")
-            deliverable_text = gl.nondet.web.render(deliverable_url, mode="text")
+            # 1. Multi-source evidence cross-referencing
+            try:
+                criteria_content = gl.nondet.web.render(criteria_url, mode="text")
+            except Exception as e:
+                criteria_content = f"Criteria fetch error: {str(e)}"
 
-            # 2. LLM reasoning prompt
-            prompt = f"""You are an impartial decentralized AI Judge evaluating a work deliverable for an Escrow Contract.
+            evidence_blocks = []
+            for url in deliverable_url.split(","):
+                clean_url = url.strip()
+                if not clean_url:
+                    continue
+                try:
+                    res = gl.nondet.web.render(clean_url, mode="text")
+                    if is_unusable_render(res[:400]):
+                        evidence_blocks.append(f"Source ({clean_url}): [Warning: Unusable or error response rendered]")
+                    else:
+                        evidence_blocks.append(f"Source ({clean_url}):\n{res[:1500]}")
+                except Exception as e:
+                    evidence_blocks.append(f"Source ({clean_url}): Render error {str(e)}")
+
+            combined_deliverables = "\n\n---\n\n".join(evidence_blocks) if evidence_blocks else "No deliverable content rendered."
+
+            # 2. LLM evaluation prompt with Canary Token protection
+            prompt = f"""You are an impartial decentralized AI Judge on GenLayer evaluating an Escrow deliverable.
 Task Title: {task_title}
+Attempt: {str(current_attempt)} / 3
+Canary Security Token: {canary_token}
+
 Criteria Spec ({criteria_url}):
-{criteria_text[:2000]}
+{criteria_content[:1500]}
 
 Deliverable Submission ({deliverable_url}):
-{deliverable_text[:2000]}
+{combined_deliverables}
 
 Instructions:
-Evaluate if the deliverable satisfies the task criteria.
+Evaluate if the submitted deliverable satisfies the task criteria.
+Valid Verdict Options:
+- "RELEASE": Work fully meets criteria. Release funds to worker.
+- "REFUND": Work fundamentally fails or is malicious. Refund client.
+- "RETRY": Work is partially complete or has minor fixable issues (only if attempt < 3).
+
 Respond ONLY in valid JSON format:
 {{
-  "verdict": "RELEASE" or "REFUND",
+  "verdict": "RELEASE" or "REFUND" or "RETRY",
   "confidence": 0-100,
   "reason": "Detailed step-by-step evaluation explanation."
 }}"""
@@ -131,7 +182,7 @@ Respond ONLY in valid JSON format:
             if not isinstance(mine, dict) or "verdict" not in mine:
                 return False
 
-            # Semantic consensus check: compare ONLY the verdict ("RELEASE" vs "REFUND")
+            # Semantic Consensus Check: Compare ONLY the verdict ("RELEASE", "REFUND", "RETRY")
             return mine["verdict"] == leader_data["verdict"]
 
         # Run non-deterministic consensus across validators
@@ -142,7 +193,7 @@ Respond ONLY in valid JSON format:
         confidence = int(result.get("confidence", 80))
 
         if confidence < 50:
-            raise UserError(f"AI Adjudication confidence too low ({confidence}%). Requires manual escalation.")
+            raise UserError(f"AI Adjudication confidence too low ({confidence}%). Manual escalation required.")
 
         if verdict == "RELEASE":
             # Release funds to worker
@@ -151,13 +202,20 @@ Respond ONLY in valid JSON format:
             task.verdict_reason = f"VERDICT: RELEASED | Reason: {reason}"
             self.tasks[id_str] = task
 
-            # Update reputation if contract is linked
             if _addr_to_str(self.reputation_contract) != "0x0000000000000000000000000000000000000000":
                 try:
                     gl.get_contract_at(self.reputation_contract).update_reputation(worker, True)
                 except Exception:
                     pass
             return "RELEASE"
+
+        elif verdict == "RETRY" and current_attempt < u256(3):
+            # Allow worker to retry submission
+            task.status = u8(4)  # RETRY
+            task.verdict_reason = f"VERDICT: RETRY (Attempt {str(current_attempt)}/3) | Feedback: {reason}"
+            self.tasks[id_str] = task
+            return "RETRY"
+
         else:
             # Refund funds to client
             gl.get_contract_at(client).emit_transfer(value=amount)
@@ -188,6 +246,7 @@ Respond ONLY in valid JSON format:
             "deliverable_url": t.deliverable_url,
             "amount": str(t.amount),
             "status": t.status,
+            "attempts": t.attempts,
             "verdict_reason": t.verdict_reason
         }
 
