@@ -1,115 +1,83 @@
-# v0.2.18
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 from genlayer import *
-from dataclasses import dataclass
 import json
 
-@allow_storage
-@dataclass
-class AgentScore:
-    agent: str
-    score: bigint
-    total_tasks: bigint
-    successful_tasks: bigint
-    failed_tasks: bigint
-
 class Contract(gl.Contract):
-    platform_admin: str
-    authorized_court: str
-    scores: TreeMap[str, AgentScore]
-    agent_list: DynArray[str]
+    platform_admin: Address
+    authorized_court: Address
+    scores: TreeMap[Address, u256]
+    total_tasks: TreeMap[Address, u256]
+    successful_tasks: TreeMap[Address, u256]
+    failed_tasks: TreeMap[Address, u256]
+    agent_list: DynArray[Address]
 
     def __init__(self):
-        caller = self._get_caller()
-        self.platform_admin = caller
-        self.authorized_court = caller
+        self.platform_admin = gl.message.sender
+        self.authorized_court = gl.message.sender
         self.scores = TreeMap()
+        self.total_tasks = TreeMap()
+        self.successful_tasks = TreeMap()
+        self.failed_tasks = TreeMap()
         self.agent_list = DynArray()
 
-    def _get_caller(self) -> str:
-        try:
-            return str(gl.message.sender).lower()
-        except Exception:
-            return str(getattr(gl.message, "sender_address", "0x0000000000000000000000000000000000000000")).lower()
-
     @gl.public.write
-    def set_authorized_court(self, court_address: str) -> None:
-        caller = self._get_caller()
-        if caller != self.platform_admin:
+    def set_authorized_court(self, court_address: Address) -> None:
+        if gl.message.sender != self.platform_admin:
             raise UserError("Only platform admin can set authorized court")
-        if not court_address.startswith("0x") or len(court_address.strip()) != 42:
-            raise UserError("Invalid court contract address format")
-        self.authorized_court = court_address.lower().strip()
+        self.authorized_court = court_address
 
     @gl.public.write
-    def update_reputation(self, agent: str, is_success: bool) -> None:
+    def update_reputation(self, agent: Address, is_success: bool) -> None:
         """
-        Called exclusively by the authorized AgentEscrowCourt contract upon finalized adjudication.
+        Called by authorized AgentEscrowCourt contract upon finalized adjudication.
         """
-        caller = self._get_caller()
-        if caller != self.authorized_court and caller != self.platform_admin:
-            raise UserError(f"Unauthorized caller: {caller}. Expected court: {self.authorized_court}")
+        if gl.message.sender != self.authorized_court and gl.message.sender != self.platform_admin:
+            raise UserError("Unauthorized caller")
 
-        agent_key = str(agent).lower().strip()
+        current_score = self.scores.get(agent, u256(100))
+        tot = self.total_tasks.get(agent, u256(0))
+        succ = self.successful_tasks.get(agent, u256(0))
+        fail = self.failed_tasks.get(agent, u256(0))
 
-        if agent_key in self.scores:
-            record = self.scores[agent_key]
-        else:
-            record = AgentScore(
-                agent=agent_key,
-                score=bigint(100),       # Initial baseline score: 100
-                total_tasks=bigint(0),
-                successful_tasks=bigint(0),
-                failed_tasks=bigint(0)
-            )
-            self.agent_list.append(agent_key)
+        if tot == u256(0) and agent not in self.agent_list:
+            self.agent_list.append(agent)
 
-        record.total_tasks += bigint(1)
+        self.total_tasks[agent] = tot + u256(1)
 
         if is_success:
-            record.successful_tasks += bigint(1)
-            record.score += bigint(10)
+            self.successful_tasks[agent] = succ + u256(1)
+            self.scores[agent] = current_score + u256(10)
         else:
-            record.failed_tasks += bigint(1)
-            if record.score >= bigint(20):
-                record.score -= bigint(20)
+            self.failed_tasks[agent] = fail + u256(1)
+            if current_score >= u256(20):
+                self.scores[agent] = current_score - u256(20)
             else:
-                record.score = bigint(0)
-
-        self.scores[agent_key] = record
+                self.scores[agent] = u256(0)
 
     @gl.public.view
-    def get_reputation(self, agent: str) -> str:
-        agent_key = str(agent).lower().strip()
-        if agent_key in self.scores:
-            s = self.scores[agent_key]
-            return json.dumps({
-                "agent": s.agent,
-                "score": str(s.score),
-                "total_tasks": str(s.total_tasks),
-                "successful_tasks": str(s.successful_tasks),
-                "failed_tasks": str(s.failed_tasks)
-            })
-        return json.dumps({
-            "agent": agent_key,
-            "score": "100",
-            "total_tasks": "0",
-            "successful_tasks": "0",
-            "failed_tasks": "0"
-        })
+    def get_reputation(self, agent: Address) -> u256:
+        return self.scores.get(agent, u256(100))
+
+    @gl.public.view
+    def get_agent_stats(self, agent: Address) -> dict:
+        return {
+            "agent": str(agent),
+            "score": str(self.scores.get(agent, u256(100))),
+            "total_tasks": str(self.total_tasks.get(agent, u256(0))),
+            "successful_tasks": str(self.successful_tasks.get(agent, u256(0))),
+            "failed_tasks": str(self.failed_tasks.get(agent, u256(0)))
+        }
 
     @gl.public.view
     def get_all_reputations(self) -> str:
-        """Public view allowing the frontend to render the Agent Leaderboard authoritatively."""
+        """Authoritative public view for frontend leaderboard synchronization."""
         res = []
         for a in self.agent_list:
-            if a in self.scores:
-                s = self.scores[a]
-                res.append({
-                    "agent": s.agent,
-                    "score": str(s.score),
-                    "total_tasks": str(s.total_tasks),
-                    "successful_tasks": str(s.successful_tasks),
-                    "failed_tasks": str(s.failed_tasks)
-                })
+            res.append({
+                "agent": str(a),
+                "score": str(self.scores.get(a, u256(100))),
+                "total_tasks": str(self.total_tasks.get(a, u256(0))),
+                "successful_tasks": str(self.successful_tasks.get(a, u256(0))),
+                "failed_tasks": str(self.failed_tasks.get(a, u256(0)))
+            })
         return json.dumps(res)
