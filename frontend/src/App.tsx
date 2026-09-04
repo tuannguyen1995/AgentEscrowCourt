@@ -46,7 +46,7 @@ interface EscrowTask {
   worker: string;
   title: string;
   criteria_url: string;
-  deliverable_url: str;
+  deliverable_url: string;
   amount: string;
   status: number; // 0: CREATED, 1: SUBMITTED, 2: RELEASED, 3: REFUNDED
   verdict_reason: string;
