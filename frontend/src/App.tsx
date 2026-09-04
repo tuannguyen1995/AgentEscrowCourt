@@ -86,10 +86,18 @@ export default function App() {
   // Contract Addresses (stored in localStorage or from env)
   const [escrowContractAddress, setEscrowContractAddress] = useState<string>(() => {
     const cached = localStorage.getItem('escrow_contract_addr');
+    if (cached && (cached.toLowerCase().startsWith('0x12e7') || cached.toLowerCase().startsWith('0xf9f6') || cached.toLowerCase().startsWith('0x83b3'))) {
+      localStorage.setItem('escrow_contract_addr', DEFAULT_ESCROW_CONTRACT_ADDRESS);
+      return DEFAULT_ESCROW_CONTRACT_ADDRESS;
+    }
     return (cached && cached.trim() !== '') ? cached : DEFAULT_ESCROW_CONTRACT_ADDRESS;
   });
   const [reputationContractAddress, setReputationContractAddress] = useState<string>(() => {
     const cached = localStorage.getItem('reputation_contract_addr');
+    if (cached && (cached.toLowerCase().startsWith('0x12e7') || cached.toLowerCase().startsWith('0xf9f6') || cached.toLowerCase().startsWith('0x83b3'))) {
+      localStorage.setItem('reputation_contract_addr', DEFAULT_REPUTATION_CONTRACT_ADDRESS);
+      return DEFAULT_REPUTATION_CONTRACT_ADDRESS;
+    }
     return (cached && cached.trim() !== '') ? cached : DEFAULT_REPUTATION_CONTRACT_ADDRESS;
   });
 
@@ -652,7 +660,7 @@ export default function App() {
             <div className="flex items-center gap-4 flex-wrap">
               <div className="hidden lg:flex items-center gap-2 px-3.5 py-1.5 bg-slate-900/90 border border-amber-500/40 rounded-xl text-xs font-mono text-amber-300 shadow-inner">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                <span>Active Escrow Court: <code className="text-slate-100 font-bold">0x12E7...CD50C</code></span>
+                <span>Active Escrow Court: <code className="text-slate-100 font-bold">{escrowContractAddress ? `${escrowContractAddress.slice(0, 6)}...${escrowContractAddress.slice(-4)}` : ''}</code></span>
               </div>
 
               {account ? (
