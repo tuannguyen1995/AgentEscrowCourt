@@ -6,8 +6,8 @@ Usage:
 """
 from genlayer_py import create_client, create_account, generate_private_key, studionet
 
-ESCROW_CONTRACT = '0xFB056E2973dd4004BD6054Bda82D1C3b2485900B'
-REPUTATION_CONTRACT = '0x0b58784eACfC8e16c487DbA7AB7DB9Ee325FF2D6'
+ESCROW_CONTRACT = '0xFAD28fb892F51c2491DD991D50E909dAda8Ec5aD'
+REPUTATION_CONTRACT = '0xc1557D0ed400e88dAFC7d8A6263FADC9B29D3577'
 
 def main():
     print("=========================================================")
