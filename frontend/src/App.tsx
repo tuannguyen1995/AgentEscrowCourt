@@ -110,7 +110,7 @@ interface AgentReputationRecord {
   failed_tasks: string;
 }
 
-const APP_VERSION = '2026.09.05.v7';
+const APP_VERSION = '2026.09.05.v8';
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
@@ -173,7 +173,7 @@ export default function App() {
   const [taskIdInput, setTaskIdInput] = useState('');
   const [title, setTitle] = useState('');
   const [criteriaUrl, setCriteriaUrl] = useState('');
-  const [criteriaHash, setCriteriaHash] = useState('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+  const [criteriaHash, setCriteriaHash] = useState('');
   const [amount, setAmount] = useState('1.0');
   const [deadlineHours, setDeadlineHours] = useState('72');
 
@@ -719,7 +719,7 @@ export default function App() {
     const createdTitle = title.trim();
     const createdAmount = amount;
     const cUrl = criteriaUrl.trim();
-    const cHash = criteriaHash.trim() || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+    const cHash = criteriaHash.trim();
     const dHours = parseInt(deadlineHours || '72', 10);
 
     try {
