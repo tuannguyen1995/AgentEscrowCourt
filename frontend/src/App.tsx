@@ -287,13 +287,13 @@ export default function App() {
 
 
 
-  // 100% REAL ON-CHAIN TRANSACTION EXECUTION VIA METAMASK (NO MOCKS / NO FALLBACKS)
-  const executeContractWrite = async (
+  // 1. BROADCAST TRANSACTION VIA METAMASK (RETURNS txHash IMMEDIATELY IN 1-2 SECONDS)
+  const sendMetaMaskTransaction = async (
     contractAddress: string,
     functionName: string,
     args: any[],
     value: bigint = 0n
-  ) => {
+  ): Promise<string> => {
     if (typeof window.ethereum === 'undefined') {
       throw new Error('MetaMask is not installed. Please install MetaMask to perform real on-chain transactions.');
     }
@@ -328,7 +328,7 @@ export default function App() {
       }
     }
 
-    setStepMessage(`Please confirm transaction (${functionName}) in your MetaMask wallet...`);
+    setStepMessage(`Please confirm transaction (${functionName}) in your MetaMask popup...`);
 
     const methodParamsAsString = JSON.stringify(args);
     const dataArr = [functionName, methodParamsAsString];
@@ -340,6 +340,7 @@ export default function App() {
       to: contractAddress,
       data: encodedData,
       value: valueHex,
+      gas: '0x7a120', // 500,000 gas limit
     };
 
     let txHash: string;
@@ -360,9 +361,12 @@ export default function App() {
       throw new Error('No transaction hash returned from MetaMask.');
     }
 
-    // 3. Asynchronous consensus monitor (polls eth_getTransactionByHash up to 45 times)
-    setStepMessage(`Tx broadcasted (${txHash.slice(0, 10)}...)! 5 Validators voting on consensus...`);
-    for (let i = 0; i < 45; i++) {
+    return txHash;
+  };
+
+  // 2. ASYNCHRONOUS BACKGROUND CONSENSUS MONITOR (DOES NOT BLOCK UI)
+  const pollTransactionConsensus = async (txHash: string, onAccepted?: () => void) => {
+    for (let i = 0; i < 50; i++) {
       try {
         const res = await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
           method: 'POST',
@@ -380,22 +384,31 @@ export default function App() {
           const st = txInfo.status || txInfo.status_name;
           const resNum = txInfo.result;
           if (st === 'ACCEPTED' || st === 'FINALIZED' || resNum === 5) {
+            if (onAccepted) onAccepted();
             break;
           }
           if (st === 'CANCELED') {
-            throw new Error(`Transaction reverted on-chain (Status: ${st}).`);
+            console.error(`Transaction reverted on-chain (Status: ${st}).`);
+            break;
           }
-          // Note: UNDETERMINED or PENDING is normal consensus progress in GenLayer, DO NOT abort!
         }
       } catch (pollErr: any) {
-        if (pollErr.message?.includes('rejected')) throw pollErr;
+        console.warn('Consensus polling attempt error:', pollErr);
       }
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 2500));
     }
+  };
 
-    // Update user balance
+  // Backwards-compatible wrapper
+  const executeContractWrite = async (
+    contractAddress: string,
+    functionName: string,
+    args: any[],
+    value: bigint = 0n
+  ) => {
+    const txHash = await sendMetaMaskTransaction(contractAddress, functionName, args, value);
+    await pollTransactionConsensus(txHash);
     if (account) fetchUserBalance(account);
-
     return txHash;
   };
 
@@ -706,15 +719,15 @@ export default function App() {
     try {
       setStepMessage('Please confirm the escrow deposit in your MetaMask popup...');
 
-      // 1. Send transaction via MetaMask FIRST
-      const txHash = await executeContractWrite(
+      // 1. Send transaction via MetaMask FIRST - returns in 1-2 seconds!
+      const txHash = await sendMetaMaskTransaction(
         escrowContractAddress,
         'create_escrow',
         [tid, createdTitle, cUrl, cHash, dHours],
         weiAmount
       );
 
-      // 2. Only upon successful MetaMask submission: add optimistic task and switch tabs!
+      // 2. INSTANT OPTIMISTIC DISPLAY: Add task to pending list and switch tabs IMMEDIATELY!
       const optimisticTask: EscrowTask = {
         id: tid,
         client: account.toLowerCase(),
@@ -728,7 +741,7 @@ export default function App() {
         status: 'PENDING_CONSENSUS',
         attempts: '0',
         verdict: 'NONE',
-        verdict_reason: 'Transaction broadcasted! Awaiting 5 AI Validators consensus (~1-2 min)...',
+        verdict_reason: `Transaction broadcasted (${txHash.slice(0, 10)}...)! Awaiting 5 AI Validators consensus (~1-2 min)...`,
         confidence: '0',
         payout_ready_at: '0',
         deadline: (Math.floor(Date.now() / 1000) + dHours * 3600).toString(),
@@ -747,18 +760,24 @@ export default function App() {
       setTitle('');
       setCriteriaUrl('');
 
-      // Switch to Escrows tab to monitor validator consensus
+      // Switch to Escrows tab immediately so user sees their new task right away!
       setActiveTab('escrows');
       setStatusFilter('ALL');
-      setSuccessBanner(`🎉 Task #${tid} (${createdAmount} GEN) submitted to Studionet! Consensus in progress...`);
+      setSuccessBanner(`🎉 Task #${tid} (${createdAmount} GEN) broadcasted to Studionet! 5 Validators are voting...`);
+      setLoading(false);
+      setStepMessage(`Tx broadcasted (${txHash.slice(0, 10)}...)! 5 Validators voting on consensus...`);
 
-      // Refresh tasks
-      await fetchTasksFromContract();
+      // 3. Monitor consensus in background - automatically promotes task to OPEN when finished!
+      pollTransactionConsensus(txHash, async () => {
+        setStepMessage('Consensus verified! Syncing escrows...');
+        await fetchTasksFromContract();
+        setSuccessBanner(`🎉 Task #${tid} successfully confirmed on-chain with validator consensus!`);
+        setStepMessage('');
+        fetchUserBalance(account);
+      });
     } catch (err: any) {
       console.error('Create escrow error:', err);
-      // Stay on the Create tab, do NOT wipe inputs, show real error message
       setTxError(formatCleanError(err));
-    } finally {
       setLoading(false);
       setStepMessage('');
     }
@@ -785,15 +804,15 @@ export default function App() {
     setStepMessage(`Please confirm staking ${stakeDisplay} GEN in your MetaMask popup...`);
 
     try {
-      // 1. Prompt MetaMask
-      const txHash = await executeContractWrite(
+      // 1. Send via MetaMask immediately
+      const txHash = await sendMetaMaskTransaction(
         escrowContractAddress,
         'accept_task',
         [task.id],
         minStakeWei > BigInt(0) ? minStakeWei : BigInt(1)
       );
 
-      // 2. Optimistic local update: Show immediate visual feedback on the card
+      // 2. Instant visual feedback on the card!
       setTasks(prev => prev.map(t => {
         if (t.id === task.id) {
           return {
@@ -801,17 +820,24 @@ export default function App() {
             status: 'CLAIMING_PENDING',
             worker: account.toLowerCase(),
             worker_stake: minStakeWei.toString(),
-            verdict_reason: `Staked ${stakeDisplay} GEN on-chain. 5 AI Validators are voting to assign worker (${account.slice(0, 6)}...${account.slice(-4)})...`
+            verdict_reason: `Staked ${stakeDisplay} GEN on-chain (${txHash.slice(0, 10)}...). 5 AI Validators are voting...`
           };
         }
         return t;
       }));
 
-      setSuccessBanner(`🎉 Staked ${stakeDisplay} GEN! Transaction broadcasted (${txHash.slice(0, 10)}...). Validators finalizing block...`);
+      setSuccessBanner(`🎉 Staked ${stakeDisplay} GEN! Transaction broadcasted (${txHash.slice(0, 10)}...). Validators voting...`);
+      setLoading(false);
+      setStepMessage(`Tx broadcasted (${txHash.slice(0, 10)}...)! 5 Validators voting on consensus...`);
 
-      // 3. Finalize on-chain state sync
-      await fetchTasksFromContract();
-      setSuccessBanner(`🎉 Task #${task.id} successfully claimed! Status is now IN_PROGRESS.`);
+      // 3. Background consensus polling
+      pollTransactionConsensus(txHash, async () => {
+        setStepMessage('Consensus verified! Syncing escrows...');
+        await fetchTasksFromContract();
+        setSuccessBanner(`🎉 Task #${task.id} successfully claimed! Status is now IN_PROGRESS.`);
+        setStepMessage('');
+        fetchUserBalance(account);
+      });
     } catch (err: any) {
       console.error('Accept task error:', err);
       // Revert optimistic card state on error
