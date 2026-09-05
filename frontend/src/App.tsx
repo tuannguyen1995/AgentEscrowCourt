@@ -1580,9 +1580,9 @@ export default function App() {
                             )}
                           </div>
 
-                          <div className="flex items-center gap-2 sm:justify-end">
-                            <span className="text-zinc-500">Attempts:</span>
-                            <span className="text-zinc-300 font-bold">{task.attempts}/3</span>
+                          <div className="flex items-center gap-2 sm:justify-end" title="Number of deliverable submissions evaluated by AI Jury (maximum 3)">
+                            <span className="text-zinc-500">Submission Attempts:</span>
+                            <span className="text-zinc-300 font-bold font-mono">{task.attempts}/3</span>
                           </div>
                         </div>
 
