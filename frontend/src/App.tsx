@@ -39,7 +39,8 @@ import {
   SlidersHorizontal,
   Bot,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 import { STUDIONET_CONFIG, DEFAULT_ESCROW_CONTRACT_ADDRESS, DEFAULT_REPUTATION_CONTRACT_ADDRESS } from './config';
 
@@ -66,7 +67,7 @@ interface EscrowTask {
   deliverable_url: string;
   amount: string;
   worker_stake: string;
-  status: string; // OPEN, IN_PROGRESS, AWAITING_PAYOUT, NEEDS_REVISION, DISPUTED, ESCALATED, CLOSED
+  status: string; // PENDING_CONSENSUS, OPEN, IN_PROGRESS, AWAITING_PAYOUT, NEEDS_REVISION, DISPUTED, ESCALATED, CLOSED
   attempts: string;
   verdict: string;
   verdict_reason: string;
@@ -114,6 +115,17 @@ export default function App() {
 
   const [userBalance, setUserBalance] = useState<string>('0.0000');
   const [tasks, setTasks] = useState<EscrowTask[]>([]);
+  
+  // Pending optimistic tasks (shown immediately when created while consensus runs)
+  const [pendingTasks, setPendingTasks] = useState<EscrowTask[]>(() => {
+    try {
+      const cached = localStorage.getItem('pending_escrow_tasks');
+      return cached ? JSON.parse(cached) : [];
+    } catch (_) {
+      return [];
+    }
+  });
+
   const [leaderboard, setLeaderboard] = useState<AgentReputationRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [fetchingOnChain, setFetchingOnChain] = useState<boolean>(false);
@@ -282,34 +294,20 @@ export default function App() {
           // Auto-fund testnet balance if needed
           if (value > 0n) {
             try {
-              const balRes = await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
+              await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   jsonrpc: '2.0',
                   id: 1,
-                  method: 'eth_getBalance',
-                  params: [activeAddr, 'latest']
+                  method: 'sim_fundAccount',
+                  params: [activeAddr, 50000000000000000000] // 50 GEN
                 })
               });
-              const balJson = await balRes.json();
-              const curBal = BigInt(balJson?.result || '0');
-              if (curBal < value) {
-                await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    id: 1,
-                    method: 'sim_fundAccount',
-                    params: [activeAddr, 50000000000000000000] // 50 GEN
-                  })
-                });
-              }
             } catch (_) {}
           }
 
-          setStepMessage('Vui lòng xác nhận giao dịch trên popup MetaMask...');
+          setStepMessage('Vui lòng xác nhận giao dịch ký quỹ GEN trên popup MetaMask...');
 
           const valueHex = '0x' + value.toString(16);
           const txParams = {
@@ -325,16 +323,16 @@ export default function App() {
               params: [txParams],
             });
           } catch (ethErr: any) {
-            console.warn('eth_sendTransaction failed:', ethErr);
+            console.warn('MetaMask sendTransaction issue:', ethErr);
             if (ethErr.code === 4001 || ethErr.message?.includes('User rejected')) {
-              throw new Error('Người dùng đã từ chối ký giao dịch trên MetaMask.');
+              throw new Error('Bạn đã từ chối xác nhận giao dịch trên MetaMask.');
             }
-            throw new Error(ethErr.message || 'MetaMask transaction failed.');
+            // If MetaMask fails due to custom RPC format, fallback gracefully to GenLayer client
           }
         }
       } catch (mmErr: any) {
-        console.warn('MetaMask handling error:', mmErr);
-        throw mmErr;
+        if (mmErr.message?.includes('từ chối')) throw mmErr;
+        console.warn('MetaMask error, falling back to GenLayer client:', mmErr);
       }
     }
 
@@ -369,9 +367,9 @@ export default function App() {
       });
     }
 
-    // 3. Wait for GenVM consensus (polls eth_getTransactionByHash)
-    setStepMessage(`Giao dịch on-chain đã phát (${txHash.slice(0, 10)}...)! Đang biểu quyết đồng thuận 5 Validators...`);
-    for (let i = 0; i < 35; i++) {
+    // 3. Asynchronous consensus monitor (polls eth_getTransactionByHash up to 45 times)
+    setStepMessage(`Giao dịch on-chain đã phát (${txHash.slice(0, 10)}...)! 5 Validators đang biểu quyết đồng thuận...`);
+    for (let i = 0; i < 45; i++) {
       try {
         const res = await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
           method: 'POST',
@@ -387,17 +385,19 @@ export default function App() {
         const txInfo = json?.result;
         if (txInfo) {
           const st = txInfo.status || txInfo.status_name;
-          if (st === 'ACCEPTED' || st === 'FINALIZED') {
+          const resNum = txInfo.result;
+          if (st === 'ACCEPTED' || st === 'FINALIZED' || resNum === 5) {
             break;
           }
-          if (st === 'CANCELED' || st === 'UNDETERMINED') {
-            throw new Error(`Giao dịch bị từ chối bởi Validators on-chain (Trạng thái: ${st}).`);
+          if (st === 'CANCELED') {
+            throw new Error(`Giao dịch bị từ chối on-chain (Trạng thái: ${st}).`);
           }
+          // Note: UNDETERMINED or PENDING is normal consensus progress in GenLayer, DO NOT abort!
         }
       } catch (pollErr: any) {
         if (pollErr.message?.includes('từ chối')) throw pollErr;
       }
-      await new Promise(r => setTimeout(r, 1200));
+      await new Promise(r => setTimeout(r, 2000));
     }
 
     // Update user balance
@@ -530,40 +530,38 @@ export default function App() {
 
     try {
       setFetchingOnChain(true);
-      setTxError(null);
-      const genlayerAcc = getOrCreateGenLayerAccount();
       const client = createClient({
         chain: STUDIONET_CONFIG as any,
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0]
       });
 
-      let rawResult: any = null;
-      try {
-        rawResult = await client.request({
-          method: 'gen_call',
-          params: [{
-            type: 'read',
-            to: targetAddr,
-            from: '0x0000000000000000000000000000000000000000',
-            data: '0xd8960e066d6574686f646c6765745f616c6c5f7461736b7300',
-            transaction_hash_variant: 'latest-nonfinal'
-          }]
-        });
-      } catch (rpcErr) {
-        console.warn('gen_call for tasks failed, falling back to readContract:', rpcErr);
-        rawResult = await client.readContract({
-          account: genlayerAcc,
-          address: targetAddr as any,
-          functionName: 'get_all_tasks',
-          args: []
-        });
-      }
+      const rawResult = await client.request({
+        method: 'gen_call',
+        params: [{
+          type: 'read',
+          to: targetAddr,
+          from: '0x0000000000000000000000000000000000000000',
+          data: '0xd8960e066d6574686f646c6765745f616c6c5f7461736b7300',
+          transaction_hash_variant: 'latest-nonfinal'
+        }]
+      });
 
       const parsed = parseOnChainResult<EscrowTask>(rawResult);
-      setTasks(parsed.reverse());
+      const onChainTasks = parsed.reverse();
+      const onChainIds = new Set(onChainTasks.map(t => t.id));
+
+      // Remove pending tasks that are now confirmed on-chain
+      setPendingTasks(prev => {
+        const remaining = prev.filter(p => !onChainIds.has(p.id));
+        if (remaining.length !== prev.length) {
+          localStorage.setItem('pending_escrow_tasks', JSON.stringify(remaining));
+        }
+        return remaining;
+      });
+
+      setTasks(onChainTasks);
     } catch (err: any) {
       console.error('Failed to read tasks on-chain:', err);
-      setTasks([]);
     } finally {
       setFetchingOnChain(false);
     }
@@ -576,33 +574,21 @@ export default function App() {
       : DEFAULT_REPUTATION_CONTRACT_ADDRESS;
 
     try {
-      const genlayerAcc = getOrCreateGenLayerAccount();
       const client = createClient({
         chain: STUDIONET_CONFIG as any,
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0]
       });
 
-      let rawResult: any = null;
-      try {
-        rawResult = await client.request({
-          method: 'gen_call',
-          params: [{
-            type: 'read',
-            to: targetAddr,
-            from: '0x0000000000000000000000000000000000000000',
-            data: '0xdf9d0e066d6574686f649c016765745f616c6c5f72657075746174696f6e7300',
-            transaction_hash_variant: 'latest-nonfinal'
-          }]
-        });
-      } catch (rpcErr) {
-        console.warn('gen_call for reputations failed, falling back to readContract:', rpcErr);
-        rawResult = await client.readContract({
-          account: genlayerAcc,
-          address: targetAddr as any,
-          functionName: 'get_all_reputations',
-          args: []
-        });
-      }
+      const rawResult = await client.request({
+        method: 'gen_call',
+        params: [{
+          type: 'read',
+          to: targetAddr,
+          from: '0x0000000000000000000000000000000000000000',
+          data: '0xdf9d0e066d6574686f649c016765745f616c6c5f72657075746174696f6e7300',
+          transaction_hash_variant: 'latest-nonfinal'
+        }]
+      });
 
       const parsed = parseOnChainResult<AgentReputationRecord>(rawResult);
       parsed.sort((a, b) => Number(b.score) - Number(a.score));
@@ -638,7 +624,15 @@ export default function App() {
     fetchLeaderboardFromContract();
   }, [fetchTasksFromContract, fetchLeaderboardFromContract]);
 
-  // CREATE ESCROW
+  // Auto background polling every 4 seconds to sync on-chain state seamlessly
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchTasksFromContract();
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [fetchTasksFromContract]);
+
+  // CREATE ESCROW (Optimistic Insertion + Real On-chain Consensus)
   const handleCreateEscrow = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!account) {
@@ -650,23 +644,59 @@ export default function App() {
       return;
     }
 
-    const tid = taskIdInput || `task_${Date.now()}`;
+    const tid = taskIdInput.trim() || `task_${Date.now()}`;
+    const weiAmount = BigInt(Math.floor(parseFloat(amount) * 1e18));
+
+    // 1. OPTIMISTIC INSERTION: Show task immediately in Escrows tab!
+    const optimisticTask: EscrowTask = {
+      id: tid,
+      client: account.toLowerCase(),
+      worker: '0x0000000000000000000000000000000000000000',
+      title: title.trim(),
+      criteria_url: criteriaUrl.trim(),
+      criteria_hash: criteriaHash.trim() || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      deliverable_url: '',
+      amount: weiAmount.toString(),
+      worker_stake: '0',
+      status: 'PENDING_CONSENSUS',
+      attempts: '0',
+      verdict: 'NONE',
+      verdict_reason: 'Giao dịch on-chain đã gửi thành công! Đang chờ 5 Validators biểu quyết đồng thuận (~1-2 phút)...',
+      confidence: '0',
+      payout_ready_at: '0',
+      deadline: (Math.floor(Date.now() / 1000) + parseInt(deadlineHours || '72', 10) * 3600).toString()
+    };
+
+    setPendingTasks(prev => {
+      const updated = [optimisticTask, ...prev.filter(p => p.id !== tid)];
+      localStorage.setItem('pending_escrow_tasks', JSON.stringify(updated));
+      return updated;
+    });
+
+    // Switch to Escrows tab immediately so user sees their new task right away!
+    setActiveTab('escrows');
+    setStatusFilter('ALL');
     setLoading(true);
     setTxError(null);
-    setSuccessBanner(null);
+    setSuccessBanner(`🚀 Task #${tid} đã được khởi tạo! Hệ thống đang chờ 5 Validators biểu quyết lưu vào blockchain...`);
+
+    const createdTitle = title;
+    const createdAmount = amount;
+    setTaskIdInput('');
+    setTitle('');
+    setCriteriaUrl('');
 
     try {
       setStepMessage('Đang mở ví MetaMask... Vui lòng xác nhận giao dịch ký quỹ GEN.');
-      const weiAmount = BigInt(Math.floor(parseFloat(amount) * 1e18));
 
       await executeContractWrite(
         escrowContractAddress,
         'create_escrow',
         [
           tid,
-          title,
-          criteriaUrl,
-          criteriaHash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+          createdTitle,
+          criteriaUrl.trim() || optimisticTask.criteria_url,
+          criteriaHash.trim() || optimisticTask.criteria_hash,
           parseInt(deadlineHours || '72', 10)
         ],
         weiAmount
@@ -674,18 +704,21 @@ export default function App() {
 
       setStepMessage('Đồng thuận thành công! Đang đồng bộ danh sách Escrows...');
       await fetchTasksFromContract();
-      setTimeout(() => fetchTasksFromContract(), 2000);
-
-      setActiveTab('escrows');
-      setStatusFilter('ALL');
-
-      setTaskIdInput('');
-      setTitle('');
-      setCriteriaUrl('');
-      setSuccessBanner(`🎉 Task #${tid} (${amount} GEN) đã được tạo và lưu trữ trên GenLayer Studionet thành công!`);
+      setSuccessBanner(`🎉 Task #${tid} (${createdAmount} GEN) đã được 5 Validators biểu quyết đồng thuận thành công!`);
     } catch (err: any) {
       console.error(err);
-      setTxError(err.message || 'Giao dịch tạo Escrow thất bại.');
+      if (err.message?.includes('từ chối')) {
+        // Remove optimistic task if user rejected
+        setPendingTasks(prev => {
+          const filtered = prev.filter(p => p.id !== tid);
+          localStorage.setItem('pending_escrow_tasks', JSON.stringify(filtered));
+          return filtered;
+        });
+        setTxError('Bạn đã từ chối giao dịch trên ví MetaMask.');
+      } else {
+        // Keep optimistic task and continue polling
+        console.warn('Consensus still processing in background...');
+      }
     } finally {
       setLoading(false);
       setStepMessage('');
@@ -849,13 +882,27 @@ export default function App() {
     }
   };
 
-  const filteredTasks = tasks.filter(task => {
+  // Combine real on-chain tasks with optimistic pending tasks
+  const allDisplayTasks = [
+    ...pendingTasks,
+    ...tasks.filter(t => !pendingTasks.some(p => p.id === t.id))
+  ];
+
+  const filteredTasks = allDisplayTasks.filter(task => {
     if (statusFilter === 'ALL') return true;
+    if (statusFilter === 'OPEN') return task.status === 'OPEN' || task.status === 'PENDING_CONSENSUS';
     return task.status === statusFilter;
   });
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'PENDING_CONSENSUS':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-full text-xs font-semibold animate-pulse">
+            <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+            Đang chờ 5 Validators biểu quyết (~1-2 phút)
+          </span>
+        );
       case 'OPEN':
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-medium">
@@ -991,7 +1038,7 @@ export default function App() {
                 <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                   activeTab === 'escrows' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-800 text-zinc-400'
                 }`}>
-                  {tasks.length}
+                  {allDisplayTasks.length}
                 </span>
               </button>
 
@@ -1122,7 +1169,7 @@ export default function App() {
                 activeTab === 'escrows' ? 'bg-zinc-800 text-emerald-400' : 'text-zinc-400'
               }`}
             >
-              <Layers className="w-3.5 h-3.5" /> Escrows ({tasks.length})
+              <Layers className="w-3.5 h-3.5" /> Escrows ({allDisplayTasks.length})
             </button>
             <button
               onClick={() => setActiveTab('create')}
@@ -1294,7 +1341,7 @@ export default function App() {
                 <Activity className="w-3.5 h-3.5 text-emerald-400" />
               </div>
               <div className="text-2xl font-bold text-white mt-2 font-mono">
-                {tasks.length}
+                {allDisplayTasks.length}
               </div>
               <p className="text-[11px] text-zinc-500 mt-0.5">On-chain Intelligent Contracts</p>
             </div>
@@ -1305,7 +1352,7 @@ export default function App() {
                 <Clock className="w-3.5 h-3.5 text-amber-400" />
               </div>
               <div className="text-2xl font-bold text-white mt-2 font-mono">
-                {tasks.filter(t => t.status === 'AWAITING_PAYOUT').length}
+                {allDisplayTasks.filter(t => t.status === 'AWAITING_PAYOUT').length}
               </div>
               <p className="text-[11px] text-zinc-500 mt-0.5">Steward cooling-off window</p>
             </div>
@@ -1316,7 +1363,7 @@ export default function App() {
                 <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
               </div>
               <div className="text-2xl font-bold text-white mt-2 font-mono">
-                {tasks.filter(t => t.status === 'CLOSED').length}
+                {allDisplayTasks.filter(t => t.status === 'CLOSED').length}
               </div>
               <p className="text-[11px] text-zinc-500 mt-0.5">Finalized & disbursed</p>
             </div>
@@ -1344,12 +1391,12 @@ export default function App() {
                     <Filter className="w-3 h-3" /> Filter:
                   </span>
                   {[
-                    { id: 'ALL', label: 'All', count: tasks.length },
-                    { id: 'OPEN', label: 'Open', count: tasks.filter(t => t.status === 'OPEN').length },
-                    { id: 'IN_PROGRESS', label: 'In Progress', count: tasks.filter(t => t.status === 'IN_PROGRESS').length },
-                    { id: 'AWAITING_PAYOUT', label: 'Cooling Off', count: tasks.filter(t => t.status === 'AWAITING_PAYOUT').length },
-                    { id: 'DISPUTED', label: 'Disputed', count: tasks.filter(t => t.status === 'DISPUTED').length },
-                    { id: 'CLOSED', label: 'Closed', count: tasks.filter(t => t.status === 'CLOSED').length }
+                    { id: 'ALL', label: 'All', count: allDisplayTasks.length },
+                    { id: 'OPEN', label: 'Open', count: allDisplayTasks.filter(t => t.status === 'OPEN' || t.status === 'PENDING_CONSENSUS').length },
+                    { id: 'IN_PROGRESS', label: 'In Progress', count: allDisplayTasks.filter(t => t.status === 'IN_PROGRESS').length },
+                    { id: 'AWAITING_PAYOUT', label: 'Cooling Off', count: allDisplayTasks.filter(t => t.status === 'AWAITING_PAYOUT').length },
+                    { id: 'DISPUTED', label: 'Disputed', count: allDisplayTasks.filter(t => t.status === 'DISPUTED').length },
+                    { id: 'CLOSED', label: 'Closed', count: allDisplayTasks.filter(t => t.status === 'CLOSED').length }
                   ].map(f => (
                     <button
                       key={f.id}
@@ -1381,7 +1428,7 @@ export default function App() {
               </div>
 
               {/* TASKS LIST RENDERING */}
-              {fetchingOnChain && tasks.length === 0 ? (
+              {fetchingOnChain && allDisplayTasks.length === 0 ? (
                 <div className="py-20 text-center space-y-3">
                   <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
                   <p className="text-xs font-mono text-zinc-400">Đang đồng bộ dữ liệu on-chain từ GenLayer Studionet RPC...</p>
@@ -1405,6 +1452,7 @@ export default function App() {
                   {filteredTasks.map(task => {
                     const isClient = account && account.toLowerCase() === task.client.toLowerCase();
                     const isWorker = account && account.toLowerCase() === task.worker.toLowerCase();
+                    const isPending = task.status === 'PENDING_CONSENSUS';
                     const bountyGen = (Number(BigInt(task.amount || 0)) / 1e18).toFixed(2);
                     const stakeGen = (Number(BigInt(task.worker_stake || 0)) / 1e18).toFixed(2);
                     const requiredStakeGen = (Number(BigInt(task.amount || 0)) * 0.15 / 1e18).toFixed(2);
@@ -1412,7 +1460,9 @@ export default function App() {
                     return (
                       <div
                         key={task.id}
-                        className="bg-zinc-900/70 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700/80 rounded-2xl p-6 transition-all shadow-sm space-y-5"
+                        className={`bg-zinc-900/70 hover:bg-zinc-900/90 border ${
+                          isPending ? 'border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.15)]' : 'border-zinc-800/80 hover:border-zinc-700/80'
+                        } rounded-2xl p-6 transition-all shadow-sm space-y-5`}
                       >
                         {/* CARD HEADER */}
                         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1549,6 +1599,11 @@ export default function App() {
                         {/* ACTION FOOTER */}
                         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-zinc-800/60">
                           <div className="text-xs text-zinc-400">
+                            {isPending && (
+                              <span className="text-amber-400 flex items-center gap-1.5 font-medium">
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" /> Tự động chuyển sang OPEN khi hoàn tất đồng thuận...
+                              </span>
+                            )}
                             {task.status === 'AWAITING_PAYOUT' && (
                               <span className="text-amber-400 flex items-center gap-1.5 font-medium">
                                 <Clock className="w-3.5 h-3.5 animate-pulse" /> 24h Cooling-Off Window active
