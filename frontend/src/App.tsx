@@ -154,25 +154,6 @@ export default function App() {
     args: any[],
     value: bigint = 0n
   ) => {
-    // 1. Prompt MetaMask signature/confirmation if connected
-    if (typeof window.ethereum !== 'undefined' && account && account.startsWith('0x')) {
-      try {
-        const msgText = `Confirm GenLayer On-Chain Transaction:\nFunction: ${functionName}\nContract: ${contractAddress}\nValue: ${value.toString()} wei`;
-        const encoder = new TextEncoder();
-        const bytes = encoder.encode(msgText);
-        const msgHex = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-
-        await window.ethereum.request({
-          method: 'personal_sign',
-          params: [msgHex, account]
-        });
-      } catch (userErr: any) {
-        if (userErr.code === 4001 || userErr.message?.includes("rejected")) {
-          throw new Error("Transaction cancelled in MetaMask.");
-        }
-      }
-    }
-
     const genlayerAcc = getOrCreateGenLayerAccount(account);
     const client = createClient({
       chain: STUDIONET_CONFIG as any,
@@ -180,7 +161,7 @@ export default function App() {
       account: genlayerAcc
     });
 
-    // 2. Fund GenLayer Studio account to guarantee sufficient balance on Studio RPC
+    // Fund GenLayer Studio account to guarantee sufficient balance on Studio RPC
     try {
       const fundAmount = Number(value + BigInt(100000000000000000000));
       await client.request({
@@ -189,7 +170,7 @@ export default function App() {
       });
     } catch (_) {}
 
-    // 3. Write contract via GenLayer client (guarantees valid GenVM consensus execution)
+    // Write contract via GenLayer client (guarantees valid GenVM consensus execution)
     const txHash = await client.writeContract({
       account: genlayerAcc,
       address: contractAddress as any,
@@ -449,7 +430,7 @@ export default function App() {
     setSuccessBanner(null);
 
     try {
-      setStepMessage("Opening MetaMask popup... Please confirm transaction in MetaMask.");
+      setStepMessage(`Broadcasting create_escrow transaction to GenLayer Studionet RPC...`);
       const weiAmount = BigInt(Math.floor(parseFloat(amount) * 1e18));
 
       await executeContractWrite(
