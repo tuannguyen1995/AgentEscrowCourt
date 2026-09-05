@@ -244,6 +244,16 @@ export default function App() {
     setAccount(null);
   };
 
+  // Switch or Reset Worker Account for testing worker claims
+  const switchWorkerAccount = () => {
+    const newPk = generatePrivateKey();
+    localStorage.setItem('genlayer_pk', newPk);
+    const newAcc = createAccount(newPk);
+    const newAddr = newAcc.address.toLowerCase();
+    setAccount(newAddr);
+    alert(`Đã tạo và đổi sang Ví Worker mới:\n${newAddr}\n\nBây giờ bạn có thể nhận task (Claim Task) và ký quỹ 15%!`);
+  };
+
   // Safe helper to parse raw RPC JSON / Hex string results
   const parseOnChainResult = <T,>(raw: any): T[] => {
     if (!raw) return [];
@@ -466,6 +476,11 @@ export default function App() {
   const handleAcceptTask = async (task: EscrowTask) => {
     if (!account) {
       alert("Please connect your wallet first.");
+      return;
+    }
+
+    if (account.toLowerCase() === task.client.toLowerCase()) {
+      alert("Bạn là Người tạo Task này (Client). Smart contract cấm Client tự nhận task của chính mình.\n\nHãy bấm nút 'Đổi sang Ví Worker' để nhận task!");
       return;
     }
 
@@ -708,6 +723,15 @@ export default function App() {
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
                     <span>{account.slice(0, 6)}...{account.slice(-4)}</span>
                   </div>
+
+                  <button
+                    onClick={switchWorkerAccount}
+                    title="Đổi sang Ví Worker mới để nhận task (Claim)"
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 rounded-xl text-xs font-semibold text-indigo-300 transition shadow-lg"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Switch Worker Role</span>
+                  </button>
 
                   <button
                     onClick={disconnectWallet}
@@ -1056,14 +1080,36 @@ export default function App() {
 
                       <div className="flex items-center gap-3 flex-wrap">
                         {/* ACCEPT TASK (Worker lock 15% stake) */}
-                        {task.status === 'OPEN' && account && account !== task.client && (
-                          <button
-                            onClick={() => handleAcceptTask(task)}
-                            disabled={loading}
-                            className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 text-xs font-black rounded-xl shadow-lg transition flex items-center gap-2"
-                          >
-                            <DollarSign className="w-4 h-4" /> Claim Task (Stake 15%)
-                          </button>
+                        {task.status === 'OPEN' && (
+                          !account ? (
+                            <button
+                              onClick={connectWallet}
+                              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/40 text-xs font-bold rounded-xl transition flex items-center gap-2"
+                            >
+                              <ShieldCheck className="w-4 h-4 text-emerald-400" /> Connect Wallet to Claim (15% Stake)
+                            </button>
+                          ) : account.toLowerCase() !== task.client.toLowerCase() ? (
+                            <button
+                              onClick={() => handleAcceptTask(task)}
+                              disabled={loading}
+                              className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 text-xs font-black rounded-xl shadow-lg transition flex items-center gap-2 transform hover:scale-105"
+                            >
+                              <DollarSign className="w-4 h-4" /> Claim Task (Stake 15%)
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs text-amber-300 font-medium bg-amber-950/70 px-3 py-2 rounded-xl border border-amber-700/60 flex items-center gap-1.5 shadow-sm">
+                                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                                Ví của bạn là Client tạo task này (Smart Contract cấm Client tự claim)
+                              </span>
+                              <button
+                                onClick={switchWorkerAccount}
+                                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-1.5 shrink-0"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" /> Đổi sang Ví Worker để Claim
+                              </button>
+                            </div>
+                          )
                         )}
 
                         {/* SUBMIT WORK */}
