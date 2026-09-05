@@ -479,9 +479,12 @@ export default function App() {
       return;
     }
 
-    if (account.toLowerCase() === task.client.toLowerCase()) {
-      alert("Bạn là Người tạo Task này (Client). Smart contract cấm Client tự nhận task của chính mình.\n\nHãy bấm nút 'Đổi sang Ví Worker' để nhận task!");
-      return;
+    let genlayerAcc = getOrCreateGenLayerAccount();
+    if (genlayerAcc.address.toLowerCase() === task.client.toLowerCase()) {
+      const newPk = generatePrivateKey();
+      localStorage.setItem('genlayer_pk', newPk);
+      genlayerAcc = createAccount(newPk);
+      setAccount(genlayerAcc.address.toLowerCase());
     }
 
     setLoading(true);
