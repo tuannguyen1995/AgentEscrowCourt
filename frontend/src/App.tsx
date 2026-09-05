@@ -176,6 +176,7 @@ export default function App() {
   const [amount, setAmount] = useState('1.0');
   const [deadlineHours, setDeadlineHours] = useState('72');
 
+  const [claimingTaskId, setClaimingTaskId] = useState<string | null>(null);
   const [submitTaskTargetId, setSubmitTaskTargetId] = useState<string | null>(null);
   const [deliverableUrlInput, setDeliverableUrlInput] = useState('');
   const [disputeReasonInput, setDisputeReasonInput] = useState('');
@@ -398,51 +399,48 @@ export default function App() {
     return txHash;
   };
 
-  // Connect wallet
+  // Connect wallet directly via MetaMask
   const connectWallet = async () => {
+    if (typeof window.ethereum === 'undefined') {
+      alert('MetaMask is not installed. Please install MetaMask to interact with GenLayer Studionet.');
+      return;
+    }
     try {
       setLoading(true);
       setTxError(null);
-      
-      const genlayerAcc = getOrCreateGenLayerAccount();
-      let userAddr = genlayerAcc.address.toLowerCase();
 
-      if (typeof window.ethereum !== 'undefined') {
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      if (accounts && accounts[0]) {
+        const userAddr = accounts[0].toLowerCase();
+        setAccount(userAddr);
+        localStorage.setItem('connected_wallet_account', userAddr);
+
+        const CHAIN_ID_HEX = '0x' + STUDIONET_CONFIG.id.toString(16);
         try {
-          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-          if (accounts && accounts[0]) {
-            userAddr = accounts[0].toLowerCase();
-          }
-
-          const CHAIN_ID_HEX = '0x' + STUDIONET_CONFIG.id.toString(16);
-          try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: CHAIN_ID_HEX }],
+          });
+        } catch (switchError: any) {
+          if (switchError.code === 4902 || switchError.code === -32603) {
             await window.ethereum.request({
-              method: 'wallet_switchEthereumChain',
-              params: [{ chainId: CHAIN_ID_HEX }],
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: CHAIN_ID_HEX,
+                chainName: STUDIONET_CONFIG.name,
+                nativeCurrency: STUDIONET_CONFIG.nativeCurrency,
+                rpcUrls: STUDIONET_CONFIG.rpcUrls.default.http,
+                blockExplorerUrls: STUDIONET_CONFIG.blockExplorerUrls,
+              }],
             });
-          } catch (switchError: any) {
-            if (switchError.code === 4902 || switchError.code === -32603) {
-              await window.ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [{
-                  chainId: CHAIN_ID_HEX,
-                  chainName: STUDIONET_CONFIG.name,
-                  nativeCurrency: STUDIONET_CONFIG.nativeCurrency,
-                  rpcUrls: STUDIONET_CONFIG.rpcUrls.default.http,
-                  blockExplorerUrls: STUDIONET_CONFIG.blockExplorerUrls,
-                }],
-              });
-            }
           }
-        } catch (_) {}
-      }
+        }
 
-      setAccount(userAddr);
-      localStorage.setItem('connected_wallet_account', userAddr);
-      fetchUserBalance(userAddr);
+        fetchUserBalance(userAddr);
+      }
     } catch (err: any) {
-      console.error(err);
-      setTxError(err.message || 'Failed to connect wallet.');
+      console.error('Connect wallet error:', err);
+      setTxError(formatCleanError(err));
     } finally {
       setLoading(false);
     }
@@ -778,25 +776,54 @@ export default function App() {
       return;
     }
 
+    const minStakeWei = (BigInt(task.amount) * BigInt(15)) / BigInt(100);
+    const stakeDisplay = (Number(minStakeWei) / 1e18).toFixed(2);
+
+    setClaimingTaskId(task.id);
     setLoading(true);
     setTxError(null);
-    setStepMessage(`Staking 15% collateral to claim Task #${task.id}...`);
+    setStepMessage(`Please confirm staking ${stakeDisplay} GEN in your MetaMask popup...`);
 
     try {
-      const minStakeWei = (BigInt(task.amount) * BigInt(15)) / BigInt(100);
-
-      await executeContractWrite(
+      // 1. Prompt MetaMask
+      const txHash = await executeContractWrite(
         escrowContractAddress,
         'accept_task',
         [task.id],
         minStakeWei > BigInt(0) ? minStakeWei : BigInt(1)
       );
 
+      // 2. Optimistic local update: Show immediate visual feedback on the card
+      setTasks(prev => prev.map(t => {
+        if (t.id === task.id) {
+          return {
+            ...t,
+            status: 'CLAIMING_PENDING',
+            worker: account.toLowerCase(),
+            worker_stake: minStakeWei.toString(),
+            verdict_reason: `Staked ${stakeDisplay} GEN on-chain. 5 AI Validators are voting to assign worker (${account.slice(0, 6)}...${account.slice(-4)})...`
+          };
+        }
+        return t;
+      }));
+
+      setSuccessBanner(`🎉 Staked ${stakeDisplay} GEN! Transaction broadcasted (${txHash.slice(0, 10)}...). Validators finalizing block...`);
+
+      // 3. Finalize on-chain state sync
       await fetchTasksFromContract();
+      setSuccessBanner(`🎉 Task #${task.id} successfully claimed! Status is now IN_PROGRESS.`);
     } catch (err: any) {
       console.error('Accept task error:', err);
+      // Revert optimistic card state on error
+      setTasks(prev => prev.map(t => {
+        if (t.id === task.id && t.status === 'CLAIMING_PENDING') {
+          return { ...t, status: 'OPEN', worker: '0x0000000000000000000000000000000000000000', worker_stake: '0' };
+        }
+        return t;
+      }));
       setTxError(formatCleanError(err));
     } finally {
+      setClaimingTaskId(null);
       setLoading(false);
       setStepMessage('');
     }
@@ -932,6 +959,13 @@ export default function App() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'CLAIMING_PENDING':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 rounded-full text-xs font-semibold animate-pulse">
+            <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+            Claiming Task (Staking 15% Collateral)
+          </span>
+        );
       case 'PENDING_CONSENSUS':
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-full text-xs font-semibold animate-pulse">
@@ -1650,13 +1684,20 @@ export default function App() {
                                   <ShieldCheck className="w-3.5 h-3.5" /> Connect Wallet to Claim (15% Stake)
                                 </button>
                               ) : !isClient ? (
-                                <button
-                                  onClick={() => handleAcceptTask(task)}
-                                  disabled={loading}
-                                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-semibold rounded-xl transition flex items-center gap-1.5 shadow-sm"
-                                >
-                                  <DollarSign className="w-3.5 h-3.5" /> Claim Task (Stake 15%)
-                                </button>
+                                task.status === 'CLAIMING_PENDING' || claimingTaskId === task.id ? (
+                                  <div className="flex items-center gap-2 px-3.5 py-2 bg-indigo-950/50 border border-indigo-500/30 rounded-xl text-xs text-indigo-300 font-mono">
+                                    <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
+                                    <span>Staking 15% collateral... 5 Validators voting</span>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleAcceptTask(task)}
+                                    disabled={loading}
+                                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-semibold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                                  >
+                                    <DollarSign className="w-3.5 h-3.5" /> Claim Task (Stake 15%)
+                                  </button>
+                                )
                               ) : (
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-xs text-amber-400/90 flex items-center gap-1.5 bg-amber-500/10 px-3.5 py-2 rounded-xl border border-amber-500/20">
