@@ -256,12 +256,15 @@ export default function App() {
       let str = raw.trim();
       if (!str || str === '0x' || str === '[]') return [];
 
-      // 1. If hex encoded (starts with 0x)
-      if (str.startsWith('0x')) {
+      // 1. If hex encoded (with or without 0x prefix)
+      const cleanHex = str.startsWith('0x') ? str.slice(2) : str;
+      if (/^[0-9a-fA-F]+$/.test(cleanHex) && cleanHex.length % 2 === 0) {
         try {
-          const hex = str.slice(2);
-          const bytes = new Uint8Array(hex.match(/.{1,2}/g)?.map(b => parseInt(b, 16)) || []);
-          str = new TextDecoder().decode(bytes).trim();
+          const bytes = new Uint8Array(cleanHex.match(/.{1,2}/g)?.map(b => parseInt(b, 16)) || []);
+          const decoded = new TextDecoder().decode(bytes).trim();
+          if (decoded && (decoded.includes('[') || decoded.includes('{'))) {
+            str = decoded;
+          }
         } catch (e) {
           console.error("Failed to decode hex bytes:", e);
         }
