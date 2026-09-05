@@ -266,7 +266,14 @@ export default function App() {
         }
       }
 
-      // 2. Try JSON parsing (handles nested JSON strings if double encoded)
+      // 2. Extract clean JSON array bounds between [ and ] (handles GenLayer Python tuple wrappers like ([...]))
+      const start = str.indexOf('[');
+      const end = str.lastIndexOf(']');
+      if (start !== -1 && end !== -1 && end > start) {
+        str = str.substring(start, end + 1);
+      }
+
+      // 3. Try JSON parsing (handles nested JSON strings if double encoded)
       try {
         let parsed = JSON.parse(str);
         if (typeof parsed === 'string') {
@@ -282,7 +289,7 @@ export default function App() {
     return [];
   };
 
-  // 100% REAL ON-CHAIN TASK FETCHING VIA get_all_tasks()
+  // 100% REAL ON-CHAIN TASK FETCHING VIA gen_call (get_all_tasks)
   const fetchTasksFromContract = useCallback(async () => {
     const targetAddr = (escrowContractAddress && escrowContractAddress.trim() !== '') 
       ? escrowContractAddress 
@@ -291,18 +298,35 @@ export default function App() {
     try {
       setFetchingOnChain(true);
       setTxError(null);
+      const genlayerAcc = getOrCreateGenLayerAccount();
       const client = createClient({
         chain: STUDIONET_CONFIG as any,
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0]
       });
 
-      const rawJsonString = await client.readContract({
-        address: targetAddr as any,
-        functionName: 'get_all_tasks',
-        args: []
-      });
+      let rawResult: any = null;
+      try {
+        rawResult = await client.request({
+          method: 'gen_call',
+          params: [{
+            type: 'read',
+            to: targetAddr,
+            from: genlayerAcc.address,
+            data: '0xd8960e066d6574686f646c6765745f616c6c5f7461736b7300',
+            transaction_hash_variant: 'latest-nonfinal'
+          }]
+        });
+      } catch (rpcErr) {
+        console.warn("gen_call for tasks failed, falling back to readContract:", rpcErr);
+        rawResult = await client.readContract({
+          account: genlayerAcc,
+          address: targetAddr as any,
+          functionName: 'get_all_tasks',
+          args: []
+        });
+      }
 
-      const parsed = parseOnChainResult<EscrowTask>(rawJsonString);
+      const parsed = parseOnChainResult<EscrowTask>(rawResult);
       setTasks(parsed.reverse());
     } catch (err: any) {
       console.error("Failed to read tasks on-chain:", err);
@@ -312,25 +336,42 @@ export default function App() {
     }
   }, [escrowContractAddress]);
 
-  // 100% REAL ON-CHAIN REPUTATION LEADERBOARD FETCHING VIA get_all_reputations()
+  // 100% REAL ON-CHAIN REPUTATION LEADERBOARD FETCHING VIA gen_call (get_all_reputations)
   const fetchLeaderboardFromContract = useCallback(async () => {
     const targetAddr = (reputationContractAddress && reputationContractAddress.trim() !== '') 
       ? reputationContractAddress 
       : DEFAULT_REPUTATION_CONTRACT_ADDRESS;
 
     try {
+      const genlayerAcc = getOrCreateGenLayerAccount();
       const client = createClient({
         chain: STUDIONET_CONFIG as any,
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0]
       });
 
-      const rawJsonString = await client.readContract({
-        address: targetAddr as any,
-        functionName: 'get_all_reputations',
-        args: []
-      });
+      let rawResult: any = null;
+      try {
+        rawResult = await client.request({
+          method: 'gen_call',
+          params: [{
+            type: 'read',
+            to: targetAddr,
+            from: genlayerAcc.address,
+            data: '0xdf9d0e066d6574686f649c016765745f616c6c5f72657075746174696f6e7300',
+            transaction_hash_variant: 'latest-nonfinal'
+          }]
+        });
+      } catch (rpcErr) {
+        console.warn("gen_call for reputations failed, falling back to readContract:", rpcErr);
+        rawResult = await client.readContract({
+          account: genlayerAcc,
+          address: targetAddr as any,
+          functionName: 'get_all_reputations',
+          args: []
+        });
+      }
 
-      const parsed = parseOnChainResult<AgentReputationRecord>(rawJsonString);
+      const parsed = parseOnChainResult<AgentReputationRecord>(rawResult);
       parsed.sort((a, b) => Number(b.score) - Number(a.score));
       setLeaderboard(parsed);
     } catch (err: any) {
