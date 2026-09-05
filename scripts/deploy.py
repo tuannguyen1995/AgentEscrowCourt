@@ -12,12 +12,15 @@ def deploy():
     print("    Deploying Contracts to GenLayer Studionet           ", flush=True)
     print("=========================================================\n", flush=True)
 
-    client = create_client(chain=studionet)
-    account = create_account(generate_private_key())
-    print(f"Deployer Wallet Address: {account.address}", flush=True)
-
-    print("Funding deployer account...", flush=True)
-    client.fund_account(address=account.address, amount=1000)
+    pk = os.environ.get("DEPLOYER_PRIVATE_KEY", "").strip()
+    if pk:
+        account = create_account(pk)
+        print(f"Deployer Wallet Address (from private key): {account.address}", flush=True)
+    else:
+        account = create_account(generate_private_key())
+        print(f"Deployer Wallet Address (generated): {account.address}", flush=True)
+        print("Funding deployer account with testnet GEN...", flush=True)
+        client.fund_account(address=account.address, amount=1000)
 
     contracts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "contracts")
 
@@ -49,7 +52,17 @@ def deploy():
         account=account
     )
     client.wait_for_transaction_receipt(link_tx)
-    print("[OK] Linked Reputation Contract successfully!", flush=True)
+    # Automatically update frontend/src/config.ts
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend", "src", "config.ts")
+    if os.path.exists(config_path):
+        with open(config_path, "r", encoding="utf-8") as cf:
+            c_text = cf.read()
+        import re
+        c_text = re.sub(r"DEFAULT_ESCROW_CONTRACT_ADDRESS\s*=\s*.*?;", f"DEFAULT_ESCROW_CONTRACT_ADDRESS = (import.meta as any).env?.VITE_ESCROW_CONTRACT_ADDRESS || '{escrow_address}';", c_text)
+        c_text = re.sub(r"DEFAULT_REPUTATION_CONTRACT_ADDRESS\s*=\s*.*?;", f"DEFAULT_REPUTATION_CONTRACT_ADDRESS = (import.meta as any).env?.VITE_REPUTATION_CONTRACT_ADDRESS || '{rep_address}';", c_text)
+        with open(config_path, "w", encoding="utf-8") as cf:
+            cf.write(c_text)
+        print("[OK] Updated frontend/src/config.ts automatically!", flush=True)
 
     print("\n=========================================================", flush=True)
     print("  DEPLOYMENT COMPLETE & VERIFIED ON GENLAYER STUDIONET ", flush=True)
