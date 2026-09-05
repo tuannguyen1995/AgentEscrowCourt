@@ -154,6 +154,25 @@ export default function App() {
     args: any[],
     value: bigint = 0n
   ) => {
+    // 1. Prompt MetaMask signature/confirmation if connected
+    if (typeof window.ethereum !== 'undefined' && account && account.startsWith('0x')) {
+      try {
+        const msgText = `Confirm GenLayer On-Chain Transaction:\nFunction: ${functionName}\nContract: ${contractAddress}\nValue: ${value.toString()} wei`;
+        const encoder = new TextEncoder();
+        const bytes = encoder.encode(msgText);
+        const msgHex = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+        await window.ethereum.request({
+          method: 'personal_sign',
+          params: [msgHex, account]
+        });
+      } catch (userErr: any) {
+        if (userErr.code === 4001 || userErr.message?.includes("rejected")) {
+          throw new Error("Transaction cancelled in MetaMask.");
+        }
+      }
+    }
+
     const genlayerAcc = getOrCreateGenLayerAccount(account);
     const client = createClient({
       chain: STUDIONET_CONFIG as any,
