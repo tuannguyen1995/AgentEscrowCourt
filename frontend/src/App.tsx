@@ -110,7 +110,7 @@ interface AgentReputationRecord {
   failed_tasks: string;
 }
 
-const APP_VERSION = '2026.09.05.v9';
+const APP_VERSION = '1.0.0';
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
@@ -1118,7 +1118,7 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-white text-base tracking-tight">AgentEscrowCourt</span>
                   <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[10px] font-mono font-medium">
-                    v2.1
+                    Production
                   </span>
                 </div>
                 <p className="text-[11px] text-zinc-400 hidden sm:block">Decentralized AI Adjudication & Escrow</p>
