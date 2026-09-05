@@ -43,6 +43,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { STUDIONET_CONFIG, DEFAULT_ESCROW_CONTRACT_ADDRESS, DEFAULT_REPUTATION_CONTRACT_ADDRESS } from './config';
+import { buildAddTransactionPayload, CONSENSUS_DISPATCHER_ADDRESS } from './utils/genlayerConsensus';
 
 declare global {
   interface Window {
@@ -109,7 +110,7 @@ interface AgentReputationRecord {
   failed_tasks: string;
 }
 
-const APP_VERSION = '2026.09.05.v4';
+const APP_VERSION = '2026.09.05.v5';
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
@@ -330,15 +331,19 @@ export default function App() {
 
     setStepMessage(`Please confirm transaction (${functionName}) in your MetaMask popup...`);
 
-    const methodParamsAsString = JSON.stringify(args);
-    const dataArr = [functionName, methodParamsAsString];
-    const encodedData = toRlp(dataArr.map((param) => toHex(param)));
+    // Dispatches via GenLayer 0x00...00 consensus contract using addTransaction
+    const addTxData = buildAddTransactionPayload(
+      activeAddr,
+      contractAddress,
+      functionName,
+      args
+    );
     const valueHex = '0x' + value.toString(16);
 
     const txParams = {
       from: activeAddr,
-      to: contractAddress,
-      data: encodedData,
+      to: CONSENSUS_DISPATCHER_ADDRESS,
+      data: addTxData,
       value: valueHex,
       gas: '0x7a120', // 500,000 gas limit
     };
@@ -366,7 +371,7 @@ export default function App() {
 
   // 2. ASYNCHRONOUS BACKGROUND CONSENSUS MONITOR (DOES NOT BLOCK UI)
   const pollTransactionConsensus = async (txHash: string, onAccepted?: () => void) => {
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 60; i++) {
       try {
         const res = await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
           method: 'POST',
@@ -383,12 +388,13 @@ export default function App() {
         if (txInfo) {
           const st = txInfo.status || txInfo.status_name;
           const resNum = txInfo.result;
-          if (st === 'ACCEPTED' || st === 'FINALIZED' || resNum === 5) {
+          const resName = txInfo.result_name;
+          if (st === 'ACCEPTED' || st === 'FINALIZED' || resName === 'MAJORITY_AGREE' || resNum === 6) {
             if (onAccepted) onAccepted();
             break;
           }
-          if (st === 'CANCELED') {
-            console.error(`Transaction reverted on-chain (Status: ${st}).`);
+          if (st === 'CANCELED' || (st === 'UNDETERMINED' && resName !== 'NO_MAJORITY')) {
+            console.error(`Transaction reverted or failed on-chain (Status: ${st}, Result: ${resName}).`);
             break;
           }
         }
@@ -548,8 +554,8 @@ export default function App() {
         const remaining = prev.filter(p => {
           if (onChainIds.has(p.id)) return false; // Confirmed on-chain!
           const ageMs = p.created_at ? now - p.created_at : 999999999;
-          // If task has no created_at (legacy) or has been pending for > 3 minutes and still not on-chain, expire it
-          if (!p.created_at || ageMs > 180000) {
+          // If task has no created_at (legacy) or has been pending for > 10 minutes and still not on-chain, expire it
+          if (!p.created_at || ageMs > 600000) {
             console.warn(`Pending task #${p.id} expired from cache.`);
             return false;
           }
