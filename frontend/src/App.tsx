@@ -110,7 +110,7 @@ interface AgentReputationRecord {
   failed_tasks: string;
 }
 
-const APP_VERSION = '2026.09.05.v6';
+const APP_VERSION = '2026.09.05.v7';
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
@@ -797,7 +797,7 @@ export default function App() {
     }
 
     if (account && account.toLowerCase() === task.client.toLowerCase()) {
-      alert(`You are currently connected as the Client (${account.slice(0, 6)}...${account.slice(-4)}) who created this task!\n\nGenLayer smart contracts strictly forbid clients from claiming their own tasks.\n\nTo claim this task as a worker, please switch to a different account in MetaMask and try again.`);
+      alert(`Access Restricted: Connected wallet (${account.slice(0, 6)}...${account.slice(-4)}) is registered as the Task Creator.\n\nProtocol security rules strictly prohibit clients from claiming their own escrow tasks. Please switch to a different worker wallet address to proceed.`);
       return;
     }
 
@@ -1734,7 +1734,7 @@ export default function App() {
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-xs text-amber-400/90 flex items-center gap-1.5 bg-amber-500/10 px-3.5 py-2 rounded-xl border border-amber-500/20">
                                     <AlertCircle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                                    <span><strong>Creator Role:</strong> You created this escrow task on-chain. Smart contracts forbid clients from claiming their own tasks. To claim as a worker, switch to Account 2 in your MetaMask wallet.</span>
+                                    <span><strong>Task Creator:</strong> You are connected as the Client for this escrow. Protocol security rules prohibit clients from claiming their own tasks. Switch to a different worker wallet to proceed.</span>
                                   </span>
                                 </div>
                               )
