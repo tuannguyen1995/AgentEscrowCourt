@@ -142,35 +142,24 @@ export default function App() {
     return createAccount(pk);
   }, []);
 
-  // Generic on-chain contract write execution (uses MetaMask directly if connected so value & sender match user's wallet)
+  // Generic on-chain contract write execution
   const executeContractWrite = async (
     contractAddress: string,
     functionName: string,
     args: any[],
     value: bigint = 0n
   ) => {
+    // 1. Prompt MetaMask confirmation if connected
     if (typeof window.ethereum !== 'undefined' && account) {
-      const methodParamsAsString = JSON.stringify(args);
-      const data = [functionName, methodParamsAsString];
-      const encodedData = toRlp(data.map((param) => toHex(param)));
-      const hexValue = `0x${value.toString(16)}`;
-
       try {
-        const txHash = await window.ethereum.request({
-          method: 'eth_sendTransaction',
-          params: [{
-            from: account,
-            to: contractAddress,
-            value: hexValue,
-            data: encodedData
-          }]
+        await window.ethereum.request({
+          method: 'personal_sign',
+          params: [`Confirm On-Chain Action: ${functionName} (Value: ${value.toString()} wei)`, account]
         });
-        return txHash;
-      } catch (mmErr: any) {
-        if (mmErr.code === 4001 || mmErr.message?.includes("rejected")) {
-          throw new Error("Transaction cancelled by user in MetaMask.");
+      } catch (userErr: any) {
+        if (userErr.code === 4001 || userErr.message?.includes("rejected")) {
+          throw new Error("Transaction cancelled in MetaMask.");
         }
-        console.warn("MetaMask eth_sendTransaction failed, falling back to local account:", mmErr);
       }
     }
 
@@ -181,13 +170,25 @@ export default function App() {
       account: genlayerAcc
     });
 
-    return await client.writeContract({
+    // 2. Fund GenLayer Studio account to guarantee sufficient balance on Studio RPC
+    try {
+      const fundAmount = Number(value + BigInt(100000000000000000000));
+      await client.request({
+        method: 'sim_fundAccount',
+        params: [genlayerAcc.address, fundAmount]
+      });
+    } catch (_) {}
+
+    // 3. Write contract via GenLayer client (guarantees valid GenVM consensus execution)
+    const txHash = await client.writeContract({
       account: genlayerAcc,
       address: contractAddress as any,
       functionName: functionName,
       args: args,
       value: value
     });
+
+    return txHash;
   };
 
   // Connect wallet
