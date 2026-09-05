@@ -158,25 +158,43 @@ export default function App() {
     if (typeof window.ethereum !== 'undefined') {
       try {
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        if (accounts && accounts[0]) {
-          const activeAddr = accounts[0];
+        const activeAddr = (window.ethereum.selectedAddress || (accounts && accounts[0])) || account;
+        if (activeAddr) {
           setAccount(activeAddr.toLowerCase());
 
           const genAmountStr = (Number(value) / 1e18).toFixed(4);
-          const msgText = `Confirm GenLayer Escrow Action:\n• Function: ${functionName}\n• Contract: ${contractAddress}\n• Value: ${genAmountStr} GEN (${value.toString()} wei)`;
+          const msgText = `GenLayer Escrow Court\n\n• Action: ${functionName}\n• Contract: ${contractAddress}\n• Amount: ${genAmountStr} GEN\n• Value: ${value.toString()} wei`;
           const encoder = new TextEncoder();
           const bytes = encoder.encode(msgText);
           const msgHex = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 
-          await window.ethereum.request({
-            method: 'personal_sign',
-            params: [msgHex, activeAddr]
-          });
+          try {
+            await window.ethereum.request({
+              method: 'personal_sign',
+              params: [msgHex, activeAddr]
+            });
+          } catch (primaryErr: any) {
+            if (primaryErr.code === 4001 || primaryErr.message?.toLowerCase().includes("rejected") || primaryErr.message?.toLowerCase().includes("cancel")) {
+              throw new Error("Giao dịch đã bị từ chối/hủy trên ví MetaMask.");
+            }
+            // Fallback inverted param order for older wallet extensions
+            try {
+              await window.ethereum.request({
+                method: 'personal_sign',
+                params: [activeAddr, msgHex]
+              });
+            } catch (fallbackErr: any) {
+              if (fallbackErr.code === 4001 || fallbackErr.message?.toLowerCase().includes("rejected") || fallbackErr.message?.toLowerCase().includes("cancel")) {
+                throw new Error("Giao dịch đã bị từ chối/hủy trên ví MetaMask.");
+              }
+            }
+          }
         }
-      } catch (userErr: any) {
-        if (userErr.code === 4001 || userErr.message?.includes("rejected")) {
-          throw new Error("Giao dịch đã bị hủy trên ví MetaMask.");
+      } catch (err: any) {
+        if (err.message?.includes("từ chối") || err.code === 4001) {
+          throw err;
         }
+        console.warn("MetaMask signature notice:", err);
       }
     }
 
@@ -196,7 +214,8 @@ export default function App() {
       });
     } catch (_) {}
 
-    // 3. Write contract via GenLayer client (guarantees valid GenVM consensus execution)
+    // 3. Write contract via GenLayer client
+    setStepMessage(`Đang phát giao dịch on-chain lên GenLayer Studionet RPC...`);
     const txHash = await client.writeContract({
       account: genlayerAcc,
       address: contractAddress as any,
@@ -204,6 +223,23 @@ export default function App() {
       args: args,
       value: value
     });
+
+    // 4. Wait for consensus (GenVM Consensus polling)
+    setStepMessage(`Giao dịch đã phát (Tx: ${txHash.slice(0, 12)}...)! Đang chờ 5 Validators biểu quyết đồng thuận (GenVM Consensus)...`);
+    for (let i = 0; i < 25; i++) {
+      try {
+        const tx = await client.getTransaction({ hash: txHash });
+        if (tx && (tx.status === 'ACCEPTED' || tx.status === 'FINALIZED')) {
+          break;
+        }
+        if (tx && (tx.status === 'CANCELED' || tx.status === 'UNDETERMINED')) {
+          throw new Error(`Giao dịch bị từ chối bởi Validators on-chain (Trạng thái: ${tx.status}).`);
+        }
+      } catch (pollErr: any) {
+        if (pollErr.message?.includes("từ chối")) throw pollErr;
+      }
+      await new Promise(r => setTimeout(r, 1200));
+    }
 
     return txHash;
   };
@@ -472,15 +508,18 @@ export default function App() {
         weiAmount
       );
 
+      setStepMessage("Đồng thuận hoàn tất! Đang đồng bộ danh sách Escrow...");
       await fetchTasksFromContract();
-      setTimeout(() => fetchTasksFromContract(), 1500);
-      setTimeout(() => fetchTasksFromContract(), 3500);
-      setTimeout(() => fetchTasksFromContract(), 6000);
+      setTimeout(() => fetchTasksFromContract(), 2000);
+
+      // Chuyển ngay sang tab Active Escrows để người dùng thấy task mới tạo
+      setActiveTab('escrows');
+      setStatusFilter('ALL');
 
       setTaskIdInput('');
       setTitle('');
       setCriteriaUrl('');
-      setSuccessBanner(`Escrow Task #${tid} successfully created and funded!`);
+      setSuccessBanner(`🎉 Escrow Task #${tid} (${amount} GEN) đã được tạo và đưa vào danh sách Active Escrows thành công!`);
     } catch (err: any) {
       console.error(err);
       setTxError(err.message || "On-chain transaction failed.");
