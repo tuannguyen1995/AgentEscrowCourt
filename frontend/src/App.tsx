@@ -154,20 +154,6 @@ export default function App() {
     args: any[],
     value: bigint = 0n
   ) => {
-    // 1. Prompt MetaMask confirmation if connected
-    if (typeof window.ethereum !== 'undefined' && account) {
-      try {
-        await window.ethereum.request({
-          method: 'personal_sign',
-          params: [`Confirm On-Chain Action: ${functionName} (Value: ${value.toString()} wei)`, account]
-        });
-      } catch (userErr: any) {
-        if (userErr.code === 4001 || userErr.message?.includes("rejected")) {
-          throw new Error("Transaction cancelled in MetaMask.");
-        }
-      }
-    }
-
     const genlayerAcc = getOrCreateGenLayerAccount(account);
     const client = createClient({
       chain: STUDIONET_CONFIG as any,
