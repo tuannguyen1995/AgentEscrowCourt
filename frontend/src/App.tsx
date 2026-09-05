@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { createClient, createAccount, generatePrivateKey } from 'genlayer-js';
+import { createClient } from 'genlayer-js';
 import { toRlp, toHex } from 'viem';
 import {
   ShieldCheck,
@@ -257,147 +257,79 @@ export default function App() {
     }
   };
 
-  const getOrCreateGenLayerAccount = useCallback((targetAddr?: string | null) => {
-    const activeAddress = targetAddr || account;
-    const keyStorageName = activeAddress 
-      ? `genlayer_pk_${activeAddress.toLowerCase()}` 
-      : 'genlayer_pk_default';
 
-    let pk = localStorage.getItem(keyStorageName) as `0x${string}` | null;
-    if (!pk || !pk.startsWith('0x') || pk.length !== 66) {
-      pk = generatePrivateKey();
-      localStorage.setItem(keyStorageName, pk);
-    }
-    return createAccount(pk);
-  }, [account]);
 
-  // Generic on-chain contract write execution with real MetaMask & GenLayer consensus
+  // 100% REAL ON-CHAIN TRANSACTION EXECUTION VIA METAMASK (NO MOCKS / NO FALLBACKS)
   const executeContractWrite = async (
     contractAddress: string,
     functionName: string,
     args: any[],
     value: bigint = 0n
   ) => {
-    let txHash = '';
-    const methodParamsAsString = JSON.stringify(args);
-    const dataArr = [functionName, methodParamsAsString];
-    const encodedData = toRlp(dataArr.map((param) => toHex(param)));
+    if (typeof window.ethereum === 'undefined') {
+      throw new Error('MetaMask is not installed. Please install MetaMask to perform real on-chain transactions.');
+    }
 
-    // Check if the current user explicitly switched to a local Worker Agent account
-    const isLocalWorker = account && localStorage.getItem(`genlayer_pk_${account.toLowerCase()}`);
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    const activeAddr = (accounts && accounts[0]) || account;
+    if (!activeAddr) {
+      throw new Error('No active wallet account connected in MetaMask.');
+    }
 
-    // 1. If not a local worker account and MetaMask extension is available: Prompt MetaMask
-    if (!isLocalWorker && typeof window.ethereum !== 'undefined') {
-      try {
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        const activeAddr = ((window.ethereum.selectedAddress || (accounts && accounts[0])) || account || '').toLowerCase();
-        
-        if (activeAddr) {
-          setAccount(activeAddr);
-          
-          // Switch to GenLayer Studionet network (Chain ID 61999)
-          const CHAIN_ID_HEX = '0x' + STUDIONET_CONFIG.id.toString(16);
-          try {
-            await window.ethereum.request({
-              method: 'wallet_switchEthereumChain',
-              params: [{ chainId: CHAIN_ID_HEX }],
-            });
-          } catch (switchError: any) {
-            if (switchError.code === 4902 || switchError.code === -32603) {
-              try {
-                await window.ethereum.request({
-                  method: 'wallet_addEthereumChain',
-                  params: [{
-                    chainId: CHAIN_ID_HEX,
-                    chainName: STUDIONET_CONFIG.name,
-                    nativeCurrency: STUDIONET_CONFIG.nativeCurrency,
-                    rpcUrls: STUDIONET_CONFIG.rpcUrls.default.http,
-                    blockExplorerUrls: STUDIONET_CONFIG.blockExplorerUrls,
-                  }],
-                });
-              } catch (_) {}
-            }
-          }
-
-          // Auto-fund testnet balance if needed
-          if (value > 0n) {
-            try {
-              await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  jsonrpc: '2.0',
-                  id: 1,
-                  method: 'sim_fundAccount',
-                  params: [activeAddr, 50000000000000000000] // 50 GEN
-                })
-              });
-            } catch (_) {}
-          }
-
-          setStepMessage('Please confirm the escrow deposit in your wallet...');
-
-          const valueHex = '0x' + value.toString(16);
-          const txParams = {
-            from: activeAddr,
-            to: contractAddress,
-            data: encodedData,
-            value: valueHex,
-          };
-
-          try {
-            txHash = await window.ethereum.request({
-              method: 'eth_sendTransaction',
-              params: [txParams],
-            });
-          } catch (ethErr: any) {
-            console.warn('MetaMask sendTransaction issue:', ethErr);
-            if (ethErr.code === 4001 || ethErr.message?.includes('User rejected')) {
-              throw new Error('Transaction was rejected in wallet.');
-            }
-            // If MetaMask fails due to custom RPC format, fallback gracefully to GenLayer client
-          }
-        }
-      } catch (mmErr: any) {
-        if (mmErr.message?.includes('rejected')) throw mmErr;
-        console.warn('MetaMask error, falling back to GenLayer client:', mmErr);
+    // Ensure MetaMask is on GenLayer Studionet (Chain ID 61999)
+    const CHAIN_ID_HEX = '0x' + STUDIONET_CONFIG.id.toString(16);
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: CHAIN_ID_HEX }],
+      });
+    } catch (switchError: any) {
+      if (switchError.code === 4902 || switchError.code === -32603) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: CHAIN_ID_HEX,
+              chainName: STUDIONET_CONFIG.name,
+              nativeCurrency: STUDIONET_CONFIG.nativeCurrency,
+              rpcUrls: STUDIONET_CONFIG.rpcUrls.default.http,
+              blockExplorerUrls: STUDIONET_CONFIG.blockExplorerUrls,
+            }],
+          });
+        } catch (_) {}
       }
     }
 
-    // 2. Execute via native GenLayer client (for Worker Agent or direct execution)
-    if (!txHash) {
-      const genlayerAcc = getOrCreateGenLayerAccount();
-      const client = createClient({
-        chain: STUDIONET_CONFIG as any,
-        endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0]
+    setStepMessage(`Please confirm transaction (${functionName}) in your MetaMask wallet...`);
+
+    const methodParamsAsString = JSON.stringify(args);
+    const dataArr = [functionName, methodParamsAsString];
+    const encodedData = toRlp(dataArr.map((param) => toHex(param)));
+    const valueHex = '0x' + value.toString(16);
+
+    const txParams = {
+      from: activeAddr,
+      to: contractAddress,
+      data: encodedData,
+      value: valueHex,
+    };
+
+    let txHash: string;
+    try {
+      txHash = await window.ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [txParams],
       });
-
-      // Ensure worker account has enough GEN for gas and collateral stake
-      try {
-        await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'sim_fundAccount',
-            params: [genlayerAcc.address.toLowerCase(), 50000000000000000000]
-          })
-        });
-      } catch (_) {}
-
-      setStepMessage(`Broadcasting transaction (${functionName}) to GenLayer Studionet RPC...`);
-      try {
-        txHash = await client.writeContract({
-          account: genlayerAcc,
-          address: contractAddress as any,
-          functionName: functionName,
-          args: args,
-          value: value
-        });
-      } catch (writeErr: any) {
-        throw new Error(formatCleanError(writeErr));
+    } catch (ethErr: any) {
+      console.error('MetaMask transaction rejected or failed:', ethErr);
+      if (ethErr.code === 4001 || ethErr.message?.includes('User rejected') || ethErr.message?.includes('denied')) {
+        throw new Error('Transaction was canceled in MetaMask.');
       }
+      throw new Error(formatCleanError(ethErr));
+    }
+
+    if (!txHash) {
+      throw new Error('No transaction hash returned from MetaMask.');
     }
 
     // 3. Asynchronous consensus monitor (polls eth_getTransactionByHash up to 45 times)
@@ -496,18 +428,7 @@ export default function App() {
     setUserBalance('0.0000');
   };
 
-  // Switch or Reset Worker Account for testing worker claims
-  const switchWorkerAccount = () => {
-    const newPk = generatePrivateKey();
-    const newAcc = createAccount(newPk);
-    const newAddr = newAcc.address.toLowerCase();
-    localStorage.setItem(`genlayer_pk_${newAddr}`, newPk);
-    localStorage.setItem('genlayer_pk_default', newPk);
-    localStorage.setItem('connected_wallet_account', newAddr);
-    setAccount(newAddr);
-    fetchUserBalance(newAddr);
-    alert(`Created & switched to new Worker Wallet:\n${newAddr}\n\nYou can now claim tasks and stake 15% collateral!`);
-  };
+
 
   // Safe helper to parse raw RPC JSON / Hex string results
   const parseOnChainResult = <T,>(raw: any): T[] => {
@@ -677,6 +598,10 @@ export default function App() {
         };
       }
     };
+    // Clean up any old mock keys from localStorage
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('genlayer_pk_')) localStorage.removeItem(key);
+    });
     restoreConnectedWallet();
   }, []);
 
@@ -798,12 +723,7 @@ export default function App() {
     }
 
     if (account && account.toLowerCase() === task.client.toLowerCase()) {
-      const wantSwitch = window.confirm(
-        `You are connected as the Client (${account.slice(0, 6)}...${account.slice(-4)}) who created this task!\n\nPer GenLayer rules: Clients cannot claim their own tasks.\n\nClick OK to switch to a dedicated Worker wallet and stake 15% collateral.`
-      );
-      if (wantSwitch) {
-        switchWorkerAccount();
-      }
+      alert(`You are currently connected as the Client (${account.slice(0, 6)}...${account.slice(-4)}) who created this task!\n\nGenLayer smart contracts strictly forbid clients from claiming their own tasks.\n\nTo claim this task as a worker, please switch to a different account in MetaMask and try again.`);
       return;
     }
 
@@ -1181,15 +1101,7 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Switch to Worker Account */}
-                  <button
-                    onClick={switchWorkerAccount}
-                    title="Generate & switch to Worker Wallet (15% stake)"
-                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-xs font-medium text-zinc-300 transition"
-                  >
-                    <User className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Worker Mode</span>
-                  </button>
+
 
                   {/* Disconnect */}
                   <button
@@ -1696,16 +1608,10 @@ export default function App() {
                                 </button>
                               ) : (
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-xs text-zinc-400 flex items-center gap-1.5 bg-zinc-950 px-3 py-1.5 rounded-lg border border-zinc-800">
-                                    <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-                                    You are the Client who created this task (cannot self-claim)
+                                  <span className="text-xs text-amber-400/90 flex items-center gap-1.5 bg-amber-500/10 px-3.5 py-2 rounded-xl border border-amber-500/20">
+                                    <AlertCircle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                                    <span><strong>Creator Role:</strong> You created this escrow task on-chain. Smart contracts forbid clients from claiming their own tasks. To claim as a worker, switch to Account 2 in your MetaMask wallet.</span>
                                   </span>
-                                  <button
-                                    onClick={switchWorkerAccount}
-                                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition flex items-center gap-1.5"
-                                  >
-                                    <RefreshCw className="w-3 h-3" /> Switch to Worker Wallet to Claim
-                                  </button>
                                 </div>
                               )
                             )}
