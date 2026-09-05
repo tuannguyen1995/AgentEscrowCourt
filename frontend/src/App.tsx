@@ -110,7 +110,7 @@ interface AgentReputationRecord {
   failed_tasks: string;
 }
 
-const APP_VERSION = '2026.09.05.v5';
+const APP_VERSION = '2026.09.05.v6';
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
@@ -331,7 +331,7 @@ export default function App() {
 
     setStepMessage(`Please confirm transaction (${functionName}) in your MetaMask popup...`);
 
-    // Dispatches via GenLayer 0x00...00 consensus contract using addTransaction
+    // Dispatches via GenLayer consensus with addTransaction calldata directly to the contract address
     const addTxData = buildAddTransactionPayload(
       activeAddr,
       contractAddress,
@@ -342,7 +342,7 @@ export default function App() {
 
     const txParams = {
       from: activeAddr,
-      to: CONSENSUS_DISPATCHER_ADDRESS,
+      to: contractAddress,
       data: addTxData,
       value: valueHex,
       gas: '0x7a120', // 500,000 gas limit
