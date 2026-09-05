@@ -74,6 +74,9 @@ interface EscrowTask {
   confidence: string;
   payout_ready_at: string;
   deadline: string;
+  created_at?: number;
+  tx_hash?: string;
+  error?: string;
 }
 
 interface AgentReputationRecord {
@@ -178,7 +181,7 @@ export default function App() {
     localStorage.setItem('reputation_contract_addr', DEFAULT_REPUTATION_CONTRACT_ADDRESS);
     fetchTasksFromContract();
     fetchLeaderboardFromContract();
-    alert('Đã reset về đúng Smart Contract chính thức trên GenLayer Studionet:\n• Escrow: ' + DEFAULT_ESCROW_CONTRACT_ADDRESS + '\n• Reputation: ' + DEFAULT_REPUTATION_CONTRACT_ADDRESS);
+    alert('Reset to official contracts on GenLayer Studionet:\n• Escrow: ' + DEFAULT_ESCROW_CONTRACT_ADDRESS + '\n• Reputation: ' + DEFAULT_REPUTATION_CONTRACT_ADDRESS);
   };
 
   const fetchUserBalance = useCallback(async (targetAddr?: string | null) => {
@@ -205,12 +208,12 @@ export default function App() {
 
   const handleFaucet = async () => {
     if (!account) {
-      alert('Vui lòng kết nối ví trước khi nhận GEN testnet.');
+      alert('Please connect your wallet before requesting testnet GEN.');
       return;
     }
     setLoading(true);
     setTxError(null);
-    setStepMessage('Đang cấp 50 GEN testnet vào ví của bạn trên GenLayer Studionet...');
+    setStepMessage('Dispensing 50 testnet GEN to your wallet on GenLayer Studionet...');
     try {
       await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
         method: 'POST',
@@ -223,9 +226,9 @@ export default function App() {
         })
       });
       await fetchUserBalance(account);
-      setSuccessBanner(`🎉 Đã nhận 50 GEN testnet vào ví ${account.slice(0, 6)}...${account.slice(-4)} thành công!`);
+      setSuccessBanner(`🎉 Successfully received 50 testnet GEN for ${account.slice(0, 6)}...${account.slice(-4)}!`);
     } catch (err: any) {
-      setTxError(err.message || 'Yêu cầu cấp GEN testnet thất bại.');
+      setTxError(err.message || 'Failed to claim testnet GEN faucet.');
     } finally {
       setLoading(false);
       setStepMessage('');
@@ -307,7 +310,7 @@ export default function App() {
             } catch (_) {}
           }
 
-          setStepMessage('Vui lòng xác nhận giao dịch ký quỹ GEN trên popup MetaMask...');
+          setStepMessage('Please confirm the escrow deposit in your wallet...');
 
           const valueHex = '0x' + value.toString(16);
           const txParams = {
@@ -325,13 +328,13 @@ export default function App() {
           } catch (ethErr: any) {
             console.warn('MetaMask sendTransaction issue:', ethErr);
             if (ethErr.code === 4001 || ethErr.message?.includes('User rejected')) {
-              throw new Error('Bạn đã từ chối xác nhận giao dịch trên MetaMask.');
+              throw new Error('Transaction was rejected in wallet.');
             }
             // If MetaMask fails due to custom RPC format, fallback gracefully to GenLayer client
           }
         }
       } catch (mmErr: any) {
-        if (mmErr.message?.includes('từ chối')) throw mmErr;
+        if (mmErr.message?.includes('rejected')) throw mmErr;
         console.warn('MetaMask error, falling back to GenLayer client:', mmErr);
       }
     }
@@ -357,7 +360,7 @@ export default function App() {
         });
       } catch (_) {}
 
-      setStepMessage('Đang phát giao dịch on-chain lên GenLayer Studionet RPC...');
+      setStepMessage('Broadcasting transaction to GenLayer Studionet RPC...');
       txHash = await client.writeContract({
         account: genlayerAcc,
         address: contractAddress as any,
@@ -368,7 +371,7 @@ export default function App() {
     }
 
     // 3. Asynchronous consensus monitor (polls eth_getTransactionByHash up to 45 times)
-    setStepMessage(`Giao dịch on-chain đã phát (${txHash.slice(0, 10)}...)! 5 Validators đang biểu quyết đồng thuận...`);
+    setStepMessage(`Tx broadcasted (${txHash.slice(0, 10)}...)! 5 Validators voting on consensus...`);
     for (let i = 0; i < 45; i++) {
       try {
         const res = await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
@@ -390,12 +393,12 @@ export default function App() {
             break;
           }
           if (st === 'CANCELED') {
-            throw new Error(`Giao dịch bị từ chối on-chain (Trạng thái: ${st}).`);
+            throw new Error(`Transaction reverted on-chain (Status: ${st}).`);
           }
           // Note: UNDETERMINED or PENDING is normal consensus progress in GenLayer, DO NOT abort!
         }
       } catch (pollErr: any) {
-        if (pollErr.message?.includes('từ chối')) throw pollErr;
+        if (pollErr.message?.includes('rejected')) throw pollErr;
       }
       await new Promise(r => setTimeout(r, 2000));
     }
@@ -473,7 +476,7 @@ export default function App() {
     localStorage.setItem('connected_wallet_account', newAddr);
     setAccount(newAddr);
     fetchUserBalance(newAddr);
-    alert(`Đã tạo và đổi sang Ví Worker mới:\n${newAddr}\n\nBây giờ bạn có thể nhận task (Claim Task) và ký quỹ 15%!`);
+    alert(`Created & switched to new Worker Wallet:\n${newAddr}\n\nYou can now claim tasks and stake 15% collateral!`);
   };
 
   // Safe helper to parse raw RPC JSON / Hex string results
@@ -550,9 +553,19 @@ export default function App() {
       const onChainTasks = parsed.reverse();
       const onChainIds = new Set(onChainTasks.map(t => t.id));
 
-      // Remove pending tasks that are now confirmed on-chain
+      // Remove pending tasks that are now confirmed on-chain or older than 3 minutes
+      const now = Date.now();
       setPendingTasks(prev => {
-        const remaining = prev.filter(p => !onChainIds.has(p.id));
+        const remaining = prev.filter(p => {
+          if (onChainIds.has(p.id)) return false; // Confirmed on-chain!
+          const ageMs = p.created_at ? now - p.created_at : 999999999;
+          // If task has no created_at (legacy) or has been pending for > 3 minutes and still not on-chain, expire it
+          if (!p.created_at || ageMs > 180000) {
+            console.warn(`Pending task #${p.id} expired from cache.`);
+            return false;
+          }
+          return true;
+        });
         if (remaining.length !== prev.length) {
           localStorage.setItem('pending_escrow_tasks', JSON.stringify(remaining));
         }
@@ -636,11 +649,11 @@ export default function App() {
   const handleCreateEscrow = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!account) {
-      alert('Vui lòng kết nối ví trước khi tạo Escrow.');
+      alert('Please connect your wallet before creating an escrow task.');
       return;
     }
     if (!escrowContractAddress) {
-      alert('Chưa cấu hình contract address.');
+      alert('Contract address is not configured.');
       return;
     }
 
@@ -661,10 +674,11 @@ export default function App() {
       status: 'PENDING_CONSENSUS',
       attempts: '0',
       verdict: 'NONE',
-      verdict_reason: 'Giao dịch on-chain đã gửi thành công! Đang chờ 5 Validators biểu quyết đồng thuận (~1-2 phút)...',
+      verdict_reason: 'Transaction submitted! Awaiting 5 AI Validators consensus (~1-2 min)...',
       confidence: '0',
       payout_ready_at: '0',
-      deadline: (Math.floor(Date.now() / 1000) + parseInt(deadlineHours || '72', 10) * 3600).toString()
+      deadline: (Math.floor(Date.now() / 1000) + parseInt(deadlineHours || '72', 10) * 3600).toString(),
+      created_at: Date.now()
     };
 
     setPendingTasks(prev => {
@@ -678,7 +692,7 @@ export default function App() {
     setStatusFilter('ALL');
     setLoading(true);
     setTxError(null);
-    setSuccessBanner(`🚀 Task #${tid} đã được khởi tạo! Hệ thống đang chờ 5 Validators biểu quyết lưu vào blockchain...`);
+    setSuccessBanner(`🚀 Task #${tid} initiated! Awaiting 5 AI Validators consensus...`);
 
     const createdTitle = title;
     const createdAmount = amount;
@@ -687,7 +701,7 @@ export default function App() {
     setCriteriaUrl('');
 
     try {
-      setStepMessage('Đang mở ví MetaMask... Vui lòng xác nhận giao dịch ký quỹ GEN.');
+      setStepMessage('Please confirm the GEN escrow transaction in your wallet...');
 
       await executeContractWrite(
         escrowContractAddress,
@@ -702,23 +716,21 @@ export default function App() {
         weiAmount
       );
 
-      setStepMessage('Đồng thuận thành công! Đang đồng bộ danh sách Escrows...');
+      setStepMessage('Consensus verified! Syncing escrows...');
       await fetchTasksFromContract();
-      setSuccessBanner(`🎉 Task #${tid} (${createdAmount} GEN) đã được 5 Validators biểu quyết đồng thuận thành công!`);
+      setSuccessBanner(`🎉 Task #${tid} (${createdAmount} GEN) successfully finalized with validator consensus!`);
     } catch (err: any) {
-      console.error(err);
-      if (err.message?.includes('từ chối')) {
-        // Remove optimistic task if user rejected
-        setPendingTasks(prev => {
-          const filtered = prev.filter(p => p.id !== tid);
-          localStorage.setItem('pending_escrow_tasks', JSON.stringify(filtered));
-          return filtered;
-        });
-        setTxError('Bạn đã từ chối giao dịch trên ví MetaMask.');
-      } else {
-        // Keep optimistic task and continue polling
-        console.warn('Consensus still processing in background...');
-      }
+      console.error('Create escrow error:', err);
+      // If error occurs, remove from pending so it does not spin indefinitely
+      setPendingTasks(prev => {
+        const filtered = prev.filter(p => p.id !== tid);
+        localStorage.setItem('pending_escrow_tasks', JSON.stringify(filtered));
+        return filtered;
+      });
+      const errorMsg = err.message || 'Transaction failed or rejected.';
+      setTxError(errorMsg.includes('rejected') || errorMsg.includes('User rejected')
+        ? 'Transaction was rejected in wallet.'
+        : `Transaction error: ${errorMsg}`);
     } finally {
       setLoading(false);
       setStepMessage('');
@@ -728,13 +740,13 @@ export default function App() {
   // ACCEPT TASK (Worker stakes 15%)
   const handleAcceptTask = async (task: EscrowTask) => {
     if (!account) {
-      alert('Vui lòng kết nối ví trước khi nhận Task.');
+      alert('Please connect your wallet before claiming this task.');
       return;
     }
 
     if (account && account.toLowerCase() === task.client.toLowerCase()) {
       const wantSwitch = window.confirm(
-        `Bạn đang kết nối ví Client (${account.slice(0, 6)}...${account.slice(-4)}) - người tạo task này!\n\nTheo quy tắc Smart Contract GenLayer: Client KHÔNG được tự nhận làm Worker cho task của chính mình.\n\nBấm OK để tự động đổi sang Ví Worker mới nhằm Claim Task và Ký quỹ 15% ngay lập tức!`
+        `You are connected as the Client (${account.slice(0, 6)}...${account.slice(-4)}) who created this task!\n\nPer GenLayer rules: Clients cannot claim their own tasks.\n\nClick OK to switch to a dedicated Worker wallet and stake 15% collateral.`
       );
       if (wantSwitch) {
         switchWorkerAccount();
@@ -744,7 +756,7 @@ export default function App() {
 
     setLoading(true);
     setTxError(null);
-    setStepMessage(`Đang khóa 15% Collateral Stake để nhận Task #${task.id}...`);
+    setStepMessage(`Staking 15% collateral to claim Task #${task.id}...`);
 
     try {
       const minStakeWei = (BigInt(task.amount) * BigInt(15)) / BigInt(100);
@@ -769,17 +781,17 @@ export default function App() {
   // SUBMIT WORK & TRIGGER LLM ADJUDICATION
   const handleSubmitWork = async (taskId: string) => {
     if (!account) {
-      alert('Vui lòng kết nối ví trước.');
+      alert('Please connect your wallet first.');
       return;
     }
     if (!deliverableUrlInput) {
-      alert('Vui lòng nhập URL kết quả công việc.');
+      alert('Please provide the deliverable submission URL.');
       return;
     }
 
     setLoading(true);
     setTxError(null);
-    setStepMessage('Đang nộp sản phẩm & kích hoạt Hội đồng AI Jury thẩm định...');
+    setStepMessage('Submitting deliverable & triggering AI Jury evaluation on-chain...');
 
     try {
       await executeContractWrite(
@@ -807,7 +819,7 @@ export default function App() {
 
     setLoading(true);
     setTxError(null);
-    setStepMessage(`Đang kích hoạt quy trình Tranh chấp (Dispute) cho Task #${taskId}...`);
+    setStepMessage(`Initiating Dispute resolution for Task #${taskId}...`);
 
     try {
       await executeContractWrite(
@@ -835,7 +847,7 @@ export default function App() {
 
     setLoading(true);
     setTxError(null);
-    setStepMessage(`Đang giải ngân và tất toán phần thưởng cho Task #${taskId}...`);
+    setStepMessage(`Releasing escrow funds and settling Task #${taskId}...`);
 
     try {
       await executeContractWrite(
@@ -862,7 +874,7 @@ export default function App() {
 
     setLoading(true);
     setTxError(null);
-    setStepMessage(`Đang rút hồi lại tiền ký quỹ cho Task #${taskId}...`);
+    setStepMessage(`Claiming refund for Task #${taskId}...`);
 
     try {
       await executeContractWrite(
@@ -900,7 +912,7 @@ export default function App() {
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-full text-xs font-semibold animate-pulse">
             <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
-            Đang chờ 5 Validators biểu quyết (~1-2 phút)
+            Awaiting Consensus (~1-2 min)
           </span>
         );
       case 'OPEN':
@@ -1094,7 +1106,7 @@ export default function App() {
                   <button
                     onClick={handleFaucet}
                     disabled={loading}
-                    title="Nhận 50 GEN testnet ngay lập tức"
+                    title="Claim 50 testnet GEN faucet"
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-medium transition"
                   >
                     <Zap className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
@@ -1104,7 +1116,7 @@ export default function App() {
                   {/* Connected Wallet Pill */}
                   <div
                     onClick={() => handleCopy(account, 'account')}
-                    title="Click để copy địa chỉ ví"
+                    title="Click to copy wallet address"
                     className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800/80 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-mono text-zinc-300 cursor-pointer transition"
                   >
                     <div className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -1119,7 +1131,7 @@ export default function App() {
                   {/* Switch to Worker Account */}
                   <button
                     onClick={switchWorkerAccount}
-                    title="Tạo & đổi sang Ví Worker mới để Claim task & ký quỹ 15%"
+                    title="Generate & switch to Worker Wallet (15% stake)"
                     className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-xs font-medium text-zinc-300 transition"
                   >
                     <User className="w-3.5 h-3.5 text-indigo-400" />
@@ -1129,7 +1141,7 @@ export default function App() {
                   {/* Disconnect */}
                   <button
                     onClick={disconnectWallet}
-                    title="Ngắt kết nối ví"
+                    title="Disconnect wallet"
                     className="p-2 bg-zinc-900 hover:bg-rose-950/60 hover:text-rose-400 text-zinc-400 border border-zinc-800 hover:border-rose-900/60 rounded-xl transition"
                   >
                     <LogOut className="w-4 h-4" />
@@ -1153,7 +1165,7 @@ export default function App() {
                   setTempRepAddr(reputationContractAddress);
                   setIsSettingsOpen(true);
                 }}
-                title="Cấu hình Smart Contract Addresses"
+                title="Configure Smart Contract Addresses"
                 className="p-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-700 rounded-xl transition"
               >
                 <Settings className="w-4 h-4" />
@@ -1431,7 +1443,7 @@ export default function App() {
               {fetchingOnChain && allDisplayTasks.length === 0 ? (
                 <div className="py-20 text-center space-y-3">
                   <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
-                  <p className="text-xs font-mono text-zinc-400">Đang đồng bộ dữ liệu on-chain từ GenLayer Studionet RPC...</p>
+                  <p className="text-xs font-mono text-zinc-400">Syncing live on-chain data from GenLayer Studionet RPC...</p>
                 </div>
               ) : filteredTasks.length === 0 ? (
                 <div className="py-16 text-center border border-zinc-800/80 rounded-2xl bg-zinc-900/40 p-8 space-y-4">
@@ -1601,7 +1613,7 @@ export default function App() {
                           <div className="text-xs text-zinc-400">
                             {isPending && (
                               <span className="text-amber-400 flex items-center gap-1.5 font-medium">
-                                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" /> Tự động chuyển sang OPEN khi hoàn tất đồng thuận...
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" /> Auto-promotes to OPEN upon consensus finalization...
                               </span>
                             )}
                             {task.status === 'AWAITING_PAYOUT' && (
@@ -1633,13 +1645,13 @@ export default function App() {
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-xs text-zinc-400 flex items-center gap-1.5 bg-zinc-950 px-3 py-1.5 rounded-lg border border-zinc-800">
                                     <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-                                    Ví của bạn là Client tạo task này (Không thể tự claim)
+                                    You are the Client who created this task (cannot self-claim)
                                   </span>
                                   <button
                                     onClick={switchWorkerAccount}
                                     className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition flex items-center gap-1.5"
                                   >
-                                    <RefreshCw className="w-3 h-3" /> Đổi sang Ví Worker để Claim
+                                    <RefreshCw className="w-3 h-3" /> Switch to Worker Wallet to Claim
                                   </button>
                                 </div>
                               )
