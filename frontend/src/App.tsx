@@ -87,21 +87,22 @@ export default function App() {
   // Contract Addresses (stored in localStorage or from env)
   const [escrowContractAddress, setEscrowContractAddress] = useState<string>(() => {
     const cached = localStorage.getItem('escrow_contract_addr');
-    if (cached && (cached.toLowerCase().startsWith('0x12e7') || cached.toLowerCase().startsWith('0xf9f6') || cached.toLowerCase().startsWith('0x83b3'))) {
+    if (!cached || cached.toLowerCase() !== DEFAULT_ESCROW_CONTRACT_ADDRESS.toLowerCase()) {
       localStorage.setItem('escrow_contract_addr', DEFAULT_ESCROW_CONTRACT_ADDRESS);
       return DEFAULT_ESCROW_CONTRACT_ADDRESS;
     }
-    return (cached && cached.trim() !== '') ? cached : DEFAULT_ESCROW_CONTRACT_ADDRESS;
+    return cached;
   });
   const [reputationContractAddress, setReputationContractAddress] = useState<string>(() => {
     const cached = localStorage.getItem('reputation_contract_addr');
-    if (cached && (cached.toLowerCase().startsWith('0x12e7') || cached.toLowerCase().startsWith('0xf9f6') || cached.toLowerCase().startsWith('0x83b3'))) {
+    if (!cached || cached.toLowerCase() !== DEFAULT_REPUTATION_CONTRACT_ADDRESS.toLowerCase()) {
       localStorage.setItem('reputation_contract_addr', DEFAULT_REPUTATION_CONTRACT_ADDRESS);
       return DEFAULT_REPUTATION_CONTRACT_ADDRESS;
     }
-    return (cached && cached.trim() !== '') ? cached : DEFAULT_REPUTATION_CONTRACT_ADDRESS;
+    return cached;
   });
 
+  const [userBalance, setUserBalance] = useState<string>('0.0000');
   const [tasks, setTasks] = useState<EscrowTask[]>([]);
   const [leaderboard, setLeaderboard] = useState<AgentReputationRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -133,6 +134,67 @@ export default function App() {
     localStorage.setItem('reputation_contract_addr', repAddr);
   };
 
+  const handleResetToOfficialAddresses = () => {
+    setEscrowContractAddress(DEFAULT_ESCROW_CONTRACT_ADDRESS);
+    setReputationContractAddress(DEFAULT_REPUTATION_CONTRACT_ADDRESS);
+    localStorage.setItem('escrow_contract_addr', DEFAULT_ESCROW_CONTRACT_ADDRESS);
+    localStorage.setItem('reputation_contract_addr', DEFAULT_REPUTATION_CONTRACT_ADDRESS);
+    fetchTasksFromContract();
+    fetchLeaderboardFromContract();
+    alert("Đã reset về đúng Smart Contract chính thức trên GenLayer Studionet:\n• Escrow: " + DEFAULT_ESCROW_CONTRACT_ADDRESS + "\n• Reputation: " + DEFAULT_REPUTATION_CONTRACT_ADDRESS);
+  };
+
+  const fetchUserBalance = useCallback(async (targetAddr?: string | null) => {
+    const active = targetAddr || account;
+    if (!active) return;
+    try {
+      const res = await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'eth_getBalance',
+          params: [active.toLowerCase(), 'latest']
+        })
+      });
+      const json = await res.json();
+      if (json && json.result) {
+        const balWei = BigInt(json.result);
+        setUserBalance((Number(balWei) / 1e18).toFixed(4));
+      }
+    } catch (_) {}
+  }, [account]);
+
+  const handleFaucet = async () => {
+    if (!account) {
+      alert("Vui lòng kết nối ví trước khi nhận GEN testnet.");
+      return;
+    }
+    setLoading(true);
+    setTxError(null);
+    setStepMessage("Đang cấp 50 GEN testnet vào ví của bạn trên GenLayer Studionet...");
+    try {
+      await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'sim_fundAccount',
+          params: [account.toLowerCase(), 50000000000000000000] // 50 GEN
+        })
+      });
+      await fetchUserBalance(account);
+      setSuccessBanner(`🎉 Đã nhận 50 GEN testnet vào ví ${account.slice(0, 6)}...${account.slice(-4)} thành công!`);
+    } catch (err: any) {
+      setTxError(err.message || "Yêu cầu cấp GEN testnet thất bại.");
+    } finally {
+      setLoading(false);
+      setStepMessage('');
+    }
+  };
+
   const getOrCreateGenLayerAccount = useCallback((targetAddr?: string | null) => {
     const activeAddress = targetAddr || account;
     const keyStorageName = activeAddress 
@@ -147,102 +209,169 @@ export default function App() {
     return createAccount(pk);
   }, [account]);
 
-  // Generic on-chain contract write execution
+  // Generic on-chain contract write execution with real MetaMask & GenLayer consensus
   const executeContractWrite = async (
     contractAddress: string,
     functionName: string,
     args: any[],
     value: bigint = 0n
   ) => {
-    // 1. Mandatory MetaMask Popup Signature when MetaMask extension is available
+    let txHash = '';
+    const methodParamsAsString = JSON.stringify(args);
+    const dataArr = [functionName, methodParamsAsString];
+    const encodedData = toRlp(dataArr.map((param) => toHex(param)));
+
+    // 1. If MetaMask extension is available: Prompt real on-chain transaction
     if (typeof window.ethereum !== 'undefined') {
       try {
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        const activeAddr = (window.ethereum.selectedAddress || (accounts && accounts[0])) || account;
+        const activeAddr = ((window.ethereum.selectedAddress || (accounts && accounts[0])) || account || '').toLowerCase();
+        
         if (activeAddr) {
-          setAccount(activeAddr.toLowerCase());
-
-          const genAmountStr = (Number(value) / 1e18).toFixed(4);
-          const msgText = `GenLayer Escrow Court\n\n• Action: ${functionName}\n• Contract: ${contractAddress}\n• Amount: ${genAmountStr} GEN\n• Value: ${value.toString()} wei`;
-          const encoder = new TextEncoder();
-          const bytes = encoder.encode(msgText);
-          const msgHex = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-
+          setAccount(activeAddr);
+          
+          // Switch to GenLayer Studionet network (Chain ID 61999)
+          const CHAIN_ID_HEX = "0x" + STUDIONET_CONFIG.id.toString(16);
           try {
             await window.ethereum.request({
-              method: 'personal_sign',
-              params: [msgHex, activeAddr]
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: CHAIN_ID_HEX }],
             });
-          } catch (primaryErr: any) {
-            if (primaryErr.code === 4001 || primaryErr.message?.toLowerCase().includes("rejected") || primaryErr.message?.toLowerCase().includes("cancel")) {
+          } catch (switchError: any) {
+            if (switchError.code === 4902 || switchError.code === -32603) {
+              try {
+                await window.ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [{
+                    chainId: CHAIN_ID_HEX,
+                    chainName: STUDIONET_CONFIG.name,
+                    nativeCurrency: STUDIONET_CONFIG.nativeCurrency,
+                    rpcUrls: STUDIONET_CONFIG.rpcUrls.default.http,
+                    blockExplorerUrls: STUDIONET_CONFIG.blockExplorerUrls,
+                  }],
+                });
+              } catch (_) {}
+            }
+          }
+
+          // Check balance and fund if needed
+          try {
+            const balRes = await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'eth_getBalance',
+                params: [activeAddr, 'latest']
+              })
+            });
+            const balJson = await balRes.json();
+            const curBal = balJson && balJson.result ? BigInt(balJson.result) : 0n;
+            if (curBal < value + BigInt(1e18)) {
+              setStepMessage("Đang tự động nạp GEN testnet vào ví của bạn trên GenLayer Studionet...");
+              await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: 2,
+                  method: 'sim_fundAccount',
+                  params: [activeAddr, Number(value + BigInt(50 * 1e18))]
+                })
+              });
+              await fetchUserBalance(activeAddr);
+            }
+          } catch (_) {}
+
+          const genAmountStr = (Number(value) / 1e18).toFixed(4);
+          setStepMessage(`Vui lòng bấm Xác nhận trên ví MetaMask để nạp ${genAmountStr} GEN vào Hợp đồng Escrow...`);
+
+          try {
+            txHash = await window.ethereum.request({
+              method: 'eth_sendTransaction',
+              params: [{
+                from: activeAddr,
+                to: contractAddress,
+                value: '0x' + value.toString(16),
+                data: encodedData
+              }]
+            });
+          } catch (sendErr: any) {
+            if (sendErr.code === 4001 || sendErr.message?.toLowerCase().includes("rejected") || sendErr.message?.toLowerCase().includes("cancel")) {
               throw new Error("Giao dịch đã bị từ chối/hủy trên ví MetaMask.");
             }
-            // Fallback inverted param order for older wallet extensions
-            try {
-              await window.ethereum.request({
-                method: 'personal_sign',
-                params: [activeAddr, msgHex]
-              });
-            } catch (fallbackErr: any) {
-              if (fallbackErr.code === 4001 || fallbackErr.message?.toLowerCase().includes("rejected") || fallbackErr.message?.toLowerCase().includes("cancel")) {
-                throw new Error("Giao dịch đã bị từ chối/hủy trên ví MetaMask.");
-              }
-            }
+            console.warn("Direct MetaMask eth_sendTransaction fallback to GenLayer client:", sendErr);
           }
         }
       } catch (err: any) {
         if (err.message?.includes("từ chối") || err.code === 4001) {
           throw err;
         }
-        console.warn("MetaMask signature notice:", err);
+        console.warn("MetaMask transaction notice:", err);
       }
     }
 
-    const genlayerAcc = getOrCreateGenLayerAccount(account);
-    const client = createClient({
-      chain: STUDIONET_CONFIG as any,
-      endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0],
-      account: genlayerAcc
-    });
-
-    // 2. Fund GenLayer Studio account to guarantee sufficient balance on Studio RPC
-    try {
-      const fundAmount = Number(value + BigInt(100000000000000000000));
-      await client.request({
-        method: 'sim_fundAccount',
-        params: [genlayerAcc.address, fundAmount]
+    // 2. Fallback to local GenLayer signer client if MetaMask was not available or direct eth_sendTransaction failed
+    if (!txHash) {
+      const genlayerAcc = getOrCreateGenLayerAccount(account);
+      const client = createClient({
+        chain: STUDIONET_CONFIG as any,
+        endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0],
+        account: genlayerAcc
       });
-    } catch (_) {}
 
-    // 3. Write contract via GenLayer client
-    setStepMessage(`Đang phát giao dịch on-chain lên GenLayer Studionet RPC...`);
-    const txHash = await client.writeContract({
-      account: genlayerAcc,
-      address: contractAddress as any,
-      functionName: functionName,
-      args: args,
-      value: value
-    });
-
-    // 4. Wait for consensus (GenVM Consensus polling via eth_getTransactionByHash)
-    setStepMessage(`Giao dịch đã phát (Tx: ${txHash.slice(0, 12)}...)! Đang chờ 5 Validators biểu quyết đồng thuận (GenVM Consensus)...`);
-    for (let i = 0; i < 30; i++) {
       try {
-        const txInfo: any = await client.request({
-          method: 'eth_getTransactionByHash',
-          params: [txHash]
+        const fundAmount = Number(value + BigInt(100000000000000000000));
+        await client.request({
+          method: 'sim_fundAccount',
+          params: [genlayerAcc.address, fundAmount]
         });
-        if (txInfo && (txInfo.status_name === 'ACCEPTED' || txInfo.status_name === 'FINALIZED')) {
-          break;
-        }
-        if (txInfo && (txInfo.status_name === 'CANCELED' || txInfo.status_name === 'UNDETERMINED')) {
-          throw new Error(`Giao dịch bị từ chối bởi Validators on-chain (Trạng thái: ${txInfo.status_name}).`);
+      } catch (_) {}
+
+      setStepMessage(`Đang phát giao dịch on-chain lên GenLayer Studionet RPC...`);
+      txHash = await client.writeContract({
+        account: genlayerAcc,
+        address: contractAddress as any,
+        functionName: functionName,
+        args: args,
+        value: value
+      });
+    }
+
+    // 3. Wait for GenVM consensus (polls eth_getTransactionByHash)
+    setStepMessage(`Giao dịch on-chain đã phát (Tx: ${txHash.slice(0, 12)}...)! Đang chờ 5 Validators biểu quyết đồng thuận...`);
+    for (let i = 0; i < 35; i++) {
+      try {
+        const res = await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'eth_getTransactionByHash',
+            params: [txHash]
+          })
+        });
+        const json = await res.json();
+        const txInfo = json?.result;
+        if (txInfo) {
+          const st = txInfo.status || txInfo.status_name;
+          if (st === 'ACCEPTED' || st === 'FINALIZED') {
+            break;
+          }
+          if (st === 'CANCELED' || st === 'UNDETERMINED') {
+            throw new Error(`Giao dịch bị từ chối bởi Validators on-chain (Trạng thái: ${st}).`);
+          }
         }
       } catch (pollErr: any) {
         if (pollErr.message?.includes("từ chối")) throw pollErr;
       }
       await new Promise(r => setTimeout(r, 1200));
     }
+
+    // Update user balance
+    if (account) fetchUserBalance(account);
 
     return txHash;
   };
@@ -287,6 +416,8 @@ export default function App() {
       }
 
       setAccount(userAddr);
+      localStorage.setItem('connected_wallet_account', userAddr);
+      fetchUserBalance(userAddr);
     } catch (err: any) {
       console.error(err);
       setTxError(err.message || "Failed to connect wallet.");
@@ -298,6 +429,8 @@ export default function App() {
   // Disconnect wallet
   const disconnectWallet = () => {
     setAccount(null);
+    localStorage.removeItem('connected_wallet_account');
+    setUserBalance('0.0000');
   };
 
   // Switch or Reset Worker Account for testing worker claims
@@ -307,7 +440,9 @@ export default function App() {
     const newAddr = newAcc.address.toLowerCase();
     localStorage.setItem(`genlayer_pk_${newAddr}`, newPk);
     localStorage.setItem('genlayer_pk_default', newPk);
+    localStorage.setItem('connected_wallet_account', newAddr);
     setAccount(newAddr);
+    fetchUserBalance(newAddr);
     alert(`Đã tạo và đổi sang Ví Worker mới:\n${newAddr}\n\nBây giờ bạn có thể nhận task (Claim Task) và ký quỹ 15%!`);
   };
 
@@ -382,7 +517,7 @@ export default function App() {
           params: [{
             type: 'read',
             to: targetAddr,
-            from: genlayerAcc.address,
+            from: '0x0000000000000000000000000000000000000000',
             data: '0xd8960e066d6574686f646c6765745f616c6c5f7461736b7300',
             transaction_hash_variant: 'latest-nonfinal'
           }]
@@ -427,7 +562,7 @@ export default function App() {
           params: [{
             type: 'read',
             to: targetAddr,
-            from: genlayerAcc.address,
+            from: '0x0000000000000000000000000000000000000000',
             data: '0xdf9d0e066d6574686f649c016765745f616c6c5f72657075746174696f6e7300',
             transaction_hash_variant: 'latest-nonfinal'
           }]
@@ -539,12 +674,14 @@ export default function App() {
       return;
     }
 
-    let genlayerAcc = getOrCreateGenLayerAccount();
-    if (genlayerAcc.address.toLowerCase() === task.client.toLowerCase()) {
-      const newPk = generatePrivateKey();
-      localStorage.setItem('genlayer_pk', newPk);
-      genlayerAcc = createAccount(newPk);
-      setAccount(genlayerAcc.address.toLowerCase());
+    if (account && account.toLowerCase() === task.client.toLowerCase()) {
+      const wantSwitch = window.confirm(
+        `Bạn đang kết nối ví Client (${account.slice(0, 6)}...${account.slice(-4)}) - người tạo task này!\n\nTheo quy tắc Smart Contract GenLayer: Client KHÔNG được tự nhận làm Worker cho task của chính mình.\n\nBấm OK để hệ thống tự tạo và đổi sang Ví Worker mới nhằm Claim Task và Ký quỹ 15% ngay lập tức!`
+      );
+      if (wantSwitch) {
+        switchWorkerAccount();
+      }
+      return;
     }
 
     setLoading(true);
@@ -781,8 +918,25 @@ export default function App() {
               </div>
 
               {account ? (
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 px-4 py-2 bg-slate-900/90 border border-emerald-500/40 rounded-xl text-xs font-mono text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Real-time GEN Balance Badge */}
+                  <div className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-950/70 border border-amber-500/40 rounded-xl text-xs font-mono text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+                    <DollarSign className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Balance: <strong className="text-amber-300 font-bold">{userBalance} GEN</strong></span>
+                  </div>
+
+                  {/* Testnet Faucet Button */}
+                  <button
+                    onClick={handleFaucet}
+                    disabled={loading}
+                    title="Nhận 50 GEN testnet vào ví ngay lập tức"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:scale-105"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-slate-950 font-black animate-pulse" />
+                    <span>🚰 Faucet 50 GEN</span>
+                  </button>
+
+                  <div className="flex items-center gap-2 px-3.5 py-2 bg-slate-900/90 border border-emerald-500/40 rounded-xl text-xs font-mono text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
                     <span>{account.slice(0, 6)}...{account.slice(-4)}</span>
                   </div>
@@ -790,16 +944,16 @@ export default function App() {
                   <button
                     onClick={switchWorkerAccount}
                     title="Đổi sang Ví Worker mới để nhận task (Claim)"
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 rounded-xl text-xs font-semibold text-indigo-300 transition shadow-lg"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 rounded-xl text-xs font-semibold text-indigo-300 transition shadow-lg"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Switch Worker Role</span>
+                    <span>Switch Role</span>
                   </button>
 
                   <button
                     onClick={disconnectWallet}
                     title="Disconnect Wallet"
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 rounded-xl text-xs font-medium text-rose-300 transition shadow-lg"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 rounded-xl text-xs font-medium text-rose-300 transition shadow-lg"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                     <span>Disconnect</span>
@@ -826,7 +980,7 @@ export default function App() {
                 <span>On-Chain Contracts Config:</span>
               </div>
               <div className="flex items-center gap-3 flex-1 max-w-3xl flex-wrap">
-                <div className="flex items-center gap-1.5 flex-1 min-w-[240px]">
+                <div className="flex items-center gap-1.5 flex-1 min-w-[220px]">
                   <span className="text-[10px] text-slate-400 font-mono">Escrow Court:</span>
                   <input
                     type="text"
@@ -836,7 +990,7 @@ export default function App() {
                     className="w-full px-3 py-1 bg-slate-900 border border-emerald-900/60 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-emerald-400"
                   />
                 </div>
-                <div className="flex items-center gap-1.5 flex-1 min-w-[240px]">
+                <div className="flex items-center gap-1.5 flex-1 min-w-[220px]">
                   <span className="text-[10px] text-slate-400 font-mono">Reputation:</span>
                   <input
                     type="text"
@@ -849,10 +1003,17 @@ export default function App() {
                 <button
                   onClick={() => { fetchTasksFromContract(); fetchLeaderboardFromContract(); }}
                   disabled={fetchingOnChain}
-                  className="px-4 py-1 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg font-bold flex items-center gap-1.5 transition shadow-md"
+                  className="px-3.5 py-1 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg font-bold flex items-center gap-1.5 transition shadow-md"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${fetchingOnChain ? 'animate-spin' : ''}`} />
                   <span>Sync</span>
+                </button>
+                <button
+                  onClick={handleResetToOfficialAddresses}
+                  title="Reset về Contract chính thức vừa deploy trên Studionet"
+                  className="px-3 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg font-mono text-[11px] transition"
+                >
+                  Reset Official
                 </button>
               </div>
             </div>
