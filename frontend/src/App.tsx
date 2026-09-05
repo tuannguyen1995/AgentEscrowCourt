@@ -224,16 +224,19 @@ export default function App() {
       value: value
     });
 
-    // 4. Wait for consensus (GenVM Consensus polling)
+    // 4. Wait for consensus (GenVM Consensus polling via eth_getTransactionByHash)
     setStepMessage(`Giao dịch đã phát (Tx: ${txHash.slice(0, 12)}...)! Đang chờ 5 Validators biểu quyết đồng thuận (GenVM Consensus)...`);
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 30; i++) {
       try {
-        const tx = await client.getTransaction({ hash: txHash });
-        if (tx && (tx.status === 'ACCEPTED' || tx.status === 'FINALIZED')) {
+        const txInfo: any = await client.request({
+          method: 'eth_getTransactionByHash',
+          params: [txHash]
+        });
+        if (txInfo && (txInfo.status_name === 'ACCEPTED' || txInfo.status_name === 'FINALIZED')) {
           break;
         }
-        if (tx && (tx.status === 'CANCELED' || tx.status === 'UNDETERMINED')) {
-          throw new Error(`Giao dịch bị từ chối bởi Validators on-chain (Trạng thái: ${tx.status}).`);
+        if (txInfo && (txInfo.status_name === 'CANCELED' || txInfo.status_name === 'UNDETERMINED')) {
+          throw new Error(`Giao dịch bị từ chối bởi Validators on-chain (Trạng thái: ${txInfo.status_name}).`);
         }
       } catch (pollErr: any) {
         if (pollErr.message?.includes("từ chối")) throw pollErr;
