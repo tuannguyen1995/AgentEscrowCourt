@@ -154,6 +154,32 @@ export default function App() {
     args: any[],
     value: bigint = 0n
   ) => {
+    // 1. Mandatory MetaMask Popup Signature when MetaMask extension is available
+    if (typeof window.ethereum !== 'undefined') {
+      try {
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        if (accounts && accounts[0]) {
+          const activeAddr = accounts[0];
+          setAccount(activeAddr.toLowerCase());
+
+          const genAmountStr = (Number(value) / 1e18).toFixed(4);
+          const msgText = `Confirm GenLayer Escrow Action:\n• Function: ${functionName}\n• Contract: ${contractAddress}\n• Value: ${genAmountStr} GEN (${value.toString()} wei)`;
+          const encoder = new TextEncoder();
+          const bytes = encoder.encode(msgText);
+          const msgHex = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+          await window.ethereum.request({
+            method: 'personal_sign',
+            params: [msgHex, activeAddr]
+          });
+        }
+      } catch (userErr: any) {
+        if (userErr.code === 4001 || userErr.message?.includes("rejected")) {
+          throw new Error("Giao dịch đã bị hủy trên ví MetaMask.");
+        }
+      }
+    }
+
     const genlayerAcc = getOrCreateGenLayerAccount(account);
     const client = createClient({
       chain: STUDIONET_CONFIG as any,
@@ -161,7 +187,7 @@ export default function App() {
       account: genlayerAcc
     });
 
-    // Fund GenLayer Studio account to guarantee sufficient balance on Studio RPC
+    // 2. Fund GenLayer Studio account to guarantee sufficient balance on Studio RPC
     try {
       const fundAmount = Number(value + BigInt(100000000000000000000));
       await client.request({
@@ -170,7 +196,7 @@ export default function App() {
       });
     } catch (_) {}
 
-    // Write contract via GenLayer client (guarantees valid GenVM consensus execution)
+    // 3. Write contract via GenLayer client (guarantees valid GenVM consensus execution)
     const txHash = await client.writeContract({
       account: genlayerAcc,
       address: contractAddress as any,
@@ -430,7 +456,7 @@ export default function App() {
     setSuccessBanner(null);
 
     try {
-      setStepMessage(`Broadcasting create_escrow transaction to GenLayer Studionet RPC...`);
+      setStepMessage("Đang mở ví MetaMask... Vui lòng bấm Ký/Xác nhận (Sign) trên popup MetaMask.");
       const weiAmount = BigInt(Math.floor(parseFloat(amount) * 1e18));
 
       await executeContractWrite(
