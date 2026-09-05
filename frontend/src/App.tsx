@@ -10,32 +10,36 @@ import {
   RefreshCw,
   ExternalLink,
   CheckCircle2,
-  XCircle,
   Clock,
   Trophy,
   Activity,
   HelpCircle,
   ChevronDown,
   ChevronUp,
-  Terminal,
-  Sparkles,
-  Lock,
   RotateCcw,
   ShieldAlert,
   Layers,
   LogOut,
   Filter,
-  Eye,
   Zap,
   Globe,
-  Award,
   Link as LinkIcon,
   AlertTriangle,
   DollarSign,
   Compass,
   Code2,
-  Flame,
-  Radio
+  Radio,
+  Settings,
+  Copy,
+  Check,
+  Coins,
+  ArrowUpRight,
+  FileText,
+  User,
+  SlidersHorizontal,
+  Bot,
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
 import { STUDIONET_CONFIG, DEFAULT_ESCROW_CONTRACT_ADDRESS, DEFAULT_REPUTATION_CONTRACT_ADDRESS } from './config';
 
@@ -81,7 +85,7 @@ interface AgentReputationRecord {
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'escrows' | 'leaderboard' | 'create' | 'architecture'>('escrows');
+  const [activeTab, setActiveTab] = useState<'escrows' | 'create' | 'leaderboard' | 'architecture'>('escrows');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   // Contract Addresses (stored in localStorage or from env)
@@ -102,13 +106,18 @@ export default function App() {
     return cached;
   });
 
+  // Settings Modal state
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [tempEscrowAddr, setTempEscrowAddr] = useState<string>(escrowContractAddress);
+  const [tempRepAddr, setTempRepAddr] = useState<string>(reputationContractAddress);
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+
   const [userBalance, setUserBalance] = useState<string>('0.0000');
   const [tasks, setTasks] = useState<EscrowTask[]>([]);
   const [leaderboard, setLeaderboard] = useState<AgentReputationRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [fetchingOnChain, setFetchingOnChain] = useState<boolean>(false);
   const [stepMessage, setStepMessage] = useState<string>('');
-  const [selectedTask, setSelectedTask] = useState<EscrowTask | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [txError, setTxError] = useState<string | null>(null);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
@@ -126,6 +135,13 @@ export default function App() {
   const [disputeReasonInput, setDisputeReasonInput] = useState('');
   const [disputeTargetId, setDisputeTargetId] = useState<string | null>(null);
 
+  // Copy helper
+  const handleCopy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedAddress(label);
+    setTimeout(() => setCopiedAddress(null), 2000);
+  };
+
   // Save contract addresses
   const handleSaveAddresses = (escrowAddr: string, repAddr: string) => {
     setEscrowContractAddress(escrowAddr);
@@ -134,14 +150,23 @@ export default function App() {
     localStorage.setItem('reputation_contract_addr', repAddr);
   };
 
+  const handleApplySettings = () => {
+    handleSaveAddresses(tempEscrowAddr.trim(), tempRepAddr.trim());
+    setIsSettingsOpen(false);
+    fetchTasksFromContract();
+    fetchLeaderboardFromContract();
+  };
+
   const handleResetToOfficialAddresses = () => {
+    setTempEscrowAddr(DEFAULT_ESCROW_CONTRACT_ADDRESS);
+    setTempRepAddr(DEFAULT_REPUTATION_CONTRACT_ADDRESS);
     setEscrowContractAddress(DEFAULT_ESCROW_CONTRACT_ADDRESS);
     setReputationContractAddress(DEFAULT_REPUTATION_CONTRACT_ADDRESS);
     localStorage.setItem('escrow_contract_addr', DEFAULT_ESCROW_CONTRACT_ADDRESS);
     localStorage.setItem('reputation_contract_addr', DEFAULT_REPUTATION_CONTRACT_ADDRESS);
     fetchTasksFromContract();
     fetchLeaderboardFromContract();
-    alert("Đã reset về đúng Smart Contract chính thức trên GenLayer Studionet:\n• Escrow: " + DEFAULT_ESCROW_CONTRACT_ADDRESS + "\n• Reputation: " + DEFAULT_REPUTATION_CONTRACT_ADDRESS);
+    alert('Đã reset về đúng Smart Contract chính thức trên GenLayer Studionet:\n• Escrow: ' + DEFAULT_ESCROW_CONTRACT_ADDRESS + '\n• Reputation: ' + DEFAULT_REPUTATION_CONTRACT_ADDRESS);
   };
 
   const fetchUserBalance = useCallback(async (targetAddr?: string | null) => {
@@ -168,12 +193,12 @@ export default function App() {
 
   const handleFaucet = async () => {
     if (!account) {
-      alert("Vui lòng kết nối ví trước khi nhận GEN testnet.");
+      alert('Vui lòng kết nối ví trước khi nhận GEN testnet.');
       return;
     }
     setLoading(true);
     setTxError(null);
-    setStepMessage("Đang cấp 50 GEN testnet vào ví của bạn trên GenLayer Studionet...");
+    setStepMessage('Đang cấp 50 GEN testnet vào ví của bạn trên GenLayer Studionet...');
     try {
       await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
         method: 'POST',
@@ -188,7 +213,7 @@ export default function App() {
       await fetchUserBalance(account);
       setSuccessBanner(`🎉 Đã nhận 50 GEN testnet vào ví ${account.slice(0, 6)}...${account.slice(-4)} thành công!`);
     } catch (err: any) {
-      setTxError(err.message || "Yêu cầu cấp GEN testnet thất bại.");
+      setTxError(err.message || 'Yêu cầu cấp GEN testnet thất bại.');
     } finally {
       setLoading(false);
       setStepMessage('');
@@ -231,7 +256,7 @@ export default function App() {
           setAccount(activeAddr);
           
           // Switch to GenLayer Studionet network (Chain ID 61999)
-          const CHAIN_ID_HEX = "0x" + STUDIONET_CONFIG.id.toString(16);
+          const CHAIN_ID_HEX = '0x' + STUDIONET_CONFIG.id.toString(16);
           try {
             await window.ethereum.request({
               method: 'wallet_switchEthereumChain',
@@ -254,82 +279,87 @@ export default function App() {
             }
           }
 
-          // Check balance and fund if needed
-          try {
-            const balRes = await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'eth_getBalance',
-                params: [activeAddr, 'latest']
-              })
-            });
-            const balJson = await balRes.json();
-            const curBal = balJson && balJson.result ? BigInt(balJson.result) : 0n;
-            if (curBal < value + BigInt(1e18)) {
-              setStepMessage("Đang tự động nạp GEN testnet vào ví của bạn trên GenLayer Studionet...");
-              await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
+          // Auto-fund testnet balance if needed
+          if (value > 0n) {
+            try {
+              const balRes = await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   jsonrpc: '2.0',
-                  id: 2,
-                  method: 'sim_fundAccount',
-                  params: [activeAddr, Number(value + BigInt(50 * 1e18))]
+                  id: 1,
+                  method: 'eth_getBalance',
+                  params: [activeAddr, 'latest']
                 })
               });
-              await fetchUserBalance(activeAddr);
-            }
-          } catch (_) {}
+              const balJson = await balRes.json();
+              const curBal = BigInt(balJson?.result || '0');
+              if (curBal < value) {
+                await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'sim_fundAccount',
+                    params: [activeAddr, 50000000000000000000] // 50 GEN
+                  })
+                });
+              }
+            } catch (_) {}
+          }
 
-          const genAmountStr = (Number(value) / 1e18).toFixed(4);
-          setStepMessage(`Vui lòng bấm Xác nhận trên ví MetaMask để nạp ${genAmountStr} GEN vào Hợp đồng Escrow...`);
+          setStepMessage('Vui lòng xác nhận giao dịch trên popup MetaMask...');
+
+          const valueHex = '0x' + value.toString(16);
+          const txParams = {
+            from: activeAddr,
+            to: contractAddress,
+            data: encodedData,
+            value: valueHex,
+          };
 
           try {
             txHash = await window.ethereum.request({
               method: 'eth_sendTransaction',
-              params: [{
-                from: activeAddr,
-                to: contractAddress,
-                value: '0x' + value.toString(16),
-                data: encodedData
-              }]
+              params: [txParams],
             });
-          } catch (sendErr: any) {
-            if (sendErr.code === 4001 || sendErr.message?.toLowerCase().includes("rejected") || sendErr.message?.toLowerCase().includes("cancel")) {
-              throw new Error("Giao dịch đã bị từ chối/hủy trên ví MetaMask.");
+          } catch (ethErr: any) {
+            console.warn('eth_sendTransaction failed:', ethErr);
+            if (ethErr.code === 4001 || ethErr.message?.includes('User rejected')) {
+              throw new Error('Người dùng đã từ chối ký giao dịch trên MetaMask.');
             }
-            console.warn("Direct MetaMask eth_sendTransaction fallback to GenLayer client:", sendErr);
+            throw new Error(ethErr.message || 'MetaMask transaction failed.');
           }
         }
-      } catch (err: any) {
-        if (err.message?.includes("từ chối") || err.code === 4001) {
-          throw err;
-        }
-        console.warn("MetaMask transaction notice:", err);
+      } catch (mmErr: any) {
+        console.warn('MetaMask handling error:', mmErr);
+        throw mmErr;
       }
     }
 
-    // 2. Fallback to local GenLayer signer client if MetaMask was not available or direct eth_sendTransaction failed
+    // 2. Fallback to native GenLayer client
     if (!txHash) {
-      const genlayerAcc = getOrCreateGenLayerAccount(account);
+      const genlayerAcc = getOrCreateGenLayerAccount();
       const client = createClient({
         chain: STUDIONET_CONFIG as any,
-        endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0],
-        account: genlayerAcc
+        endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0]
       });
 
       try {
-        const fundAmount = Number(value + BigInt(100000000000000000000));
-        await client.request({
-          method: 'sim_fundAccount',
-          params: [genlayerAcc.address, fundAmount]
+        await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'sim_fundAccount',
+            params: [genlayerAcc.address.toLowerCase(), 50000000000000000000]
+          })
         });
       } catch (_) {}
 
-      setStepMessage(`Đang phát giao dịch on-chain lên GenLayer Studionet RPC...`);
+      setStepMessage('Đang phát giao dịch on-chain lên GenLayer Studionet RPC...');
       txHash = await client.writeContract({
         account: genlayerAcc,
         address: contractAddress as any,
@@ -340,7 +370,7 @@ export default function App() {
     }
 
     // 3. Wait for GenVM consensus (polls eth_getTransactionByHash)
-    setStepMessage(`Giao dịch on-chain đã phát (Tx: ${txHash.slice(0, 12)}...)! Đang chờ 5 Validators biểu quyết đồng thuận...`);
+    setStepMessage(`Giao dịch on-chain đã phát (${txHash.slice(0, 10)}...)! Đang biểu quyết đồng thuận 5 Validators...`);
     for (let i = 0; i < 35; i++) {
       try {
         const res = await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
@@ -365,7 +395,7 @@ export default function App() {
           }
         }
       } catch (pollErr: any) {
-        if (pollErr.message?.includes("từ chối")) throw pollErr;
+        if (pollErr.message?.includes('từ chối')) throw pollErr;
       }
       await new Promise(r => setTimeout(r, 1200));
     }
@@ -392,7 +422,7 @@ export default function App() {
             userAddr = accounts[0].toLowerCase();
           }
 
-          const CHAIN_ID_HEX = "0x" + STUDIONET_CONFIG.id.toString(16);
+          const CHAIN_ID_HEX = '0x' + STUDIONET_CONFIG.id.toString(16);
           try {
             await window.ethereum.request({
               method: 'wallet_switchEthereumChain',
@@ -420,7 +450,7 @@ export default function App() {
       fetchUserBalance(userAddr);
     } catch (err: any) {
       console.error(err);
-      setTxError(err.message || "Failed to connect wallet.");
+      setTxError(err.message || 'Failed to connect wallet.');
     } finally {
       setLoading(false);
     }
@@ -458,7 +488,6 @@ export default function App() {
       let str = raw.trim();
       if (!str || str === '0x' || str === '[]') return [];
 
-      // 1. If hex encoded (with or without 0x prefix)
       const cleanHex = str.startsWith('0x') ? str.slice(2) : str;
       if (/^[0-9a-fA-F]+$/.test(cleanHex) && cleanHex.length % 2 === 0) {
         try {
@@ -468,18 +497,16 @@ export default function App() {
             str = decoded;
           }
         } catch (e) {
-          console.error("Failed to decode hex bytes:", e);
+          console.error('Failed to decode hex bytes:', e);
         }
       }
 
-      // 2. Extract clean JSON array bounds between [ and ] (handles GenLayer Python tuple wrappers like ([...]))
       const start = str.indexOf('[');
       const end = str.lastIndexOf(']');
       if (start !== -1 && end !== -1 && end > start) {
         str = str.substring(start, end + 1);
       }
 
-      // 3. Try JSON parsing (handles nested JSON strings if double encoded)
       try {
         let parsed = JSON.parse(str);
         if (typeof parsed === 'string') {
@@ -489,13 +516,13 @@ export default function App() {
         }
         if (Array.isArray(parsed)) return parsed;
       } catch (err) {
-        console.error("Failed to parse JSON on-chain result:", err, "raw:", str);
+        console.error('Failed to parse JSON on-chain result:', err, 'raw:', str);
       }
     }
     return [];
   };
 
-  // 100% REAL ON-CHAIN TASK FETCHING VIA gen_call (get_all_tasks)
+  // REAL ON-CHAIN TASK FETCHING VIA gen_call (get_all_tasks)
   const fetchTasksFromContract = useCallback(async () => {
     const targetAddr = (escrowContractAddress && escrowContractAddress.trim() !== '') 
       ? escrowContractAddress 
@@ -523,7 +550,7 @@ export default function App() {
           }]
         });
       } catch (rpcErr) {
-        console.warn("gen_call for tasks failed, falling back to readContract:", rpcErr);
+        console.warn('gen_call for tasks failed, falling back to readContract:', rpcErr);
         rawResult = await client.readContract({
           account: genlayerAcc,
           address: targetAddr as any,
@@ -535,14 +562,14 @@ export default function App() {
       const parsed = parseOnChainResult<EscrowTask>(rawResult);
       setTasks(parsed.reverse());
     } catch (err: any) {
-      console.error("Failed to read tasks on-chain:", err);
+      console.error('Failed to read tasks on-chain:', err);
       setTasks([]);
     } finally {
       setFetchingOnChain(false);
     }
   }, [escrowContractAddress]);
 
-  // 100% REAL ON-CHAIN REPUTATION LEADERBOARD FETCHING VIA gen_call (get_all_reputations)
+  // REAL ON-CHAIN REPUTATION LEADERBOARD FETCHING VIA gen_call
   const fetchLeaderboardFromContract = useCallback(async () => {
     const targetAddr = (reputationContractAddress && reputationContractAddress.trim() !== '') 
       ? reputationContractAddress 
@@ -568,7 +595,7 @@ export default function App() {
           }]
         });
       } catch (rpcErr) {
-        console.warn("gen_call for reputations failed, falling back to readContract:", rpcErr);
+        console.warn('gen_call for reputations failed, falling back to readContract:', rpcErr);
         rawResult = await client.readContract({
           account: genlayerAcc,
           address: targetAddr as any,
@@ -581,12 +608,11 @@ export default function App() {
       parsed.sort((a, b) => Number(b.score) - Number(a.score));
       setLeaderboard(parsed);
     } catch (err: any) {
-      console.error("Failed to read reputation leaderboard on-chain:", err);
+      console.error('Failed to read reputation leaderboard on-chain:', err);
       setLeaderboard([]);
     }
-  }, [reputationContractAddress, account]);
+  }, [reputationContractAddress]);
 
-  // Restore connected wallet state automatically on F5 page refresh
   useEffect(() => {
     const restoreConnectedWallet = async () => {
       const saved = localStorage.getItem('connected_wallet_account');
@@ -616,11 +642,11 @@ export default function App() {
   const handleCreateEscrow = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!account) {
-      alert("Please connect your wallet first.");
+      alert('Vui lòng kết nối ví trước khi tạo Escrow.');
       return;
     }
     if (!escrowContractAddress) {
-      alert("Please set your deployed AgentEscrowCourt contract address first.");
+      alert('Chưa cấu hình contract address.');
       return;
     }
 
@@ -630,7 +656,7 @@ export default function App() {
     setSuccessBanner(null);
 
     try {
-      setStepMessage("Đang mở ví MetaMask... Vui lòng bấm Ký/Xác nhận (Sign) trên popup MetaMask.");
+      setStepMessage('Đang mở ví MetaMask... Vui lòng xác nhận giao dịch ký quỹ GEN.');
       const weiAmount = BigInt(Math.floor(parseFloat(amount) * 1e18));
 
       await executeContractWrite(
@@ -640,27 +666,26 @@ export default function App() {
           tid,
           title,
           criteriaUrl,
-          criteriaHash || "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          criteriaHash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
           parseInt(deadlineHours || '72', 10)
         ],
         weiAmount
       );
 
-      setStepMessage("Đồng thuận hoàn tất! Đang đồng bộ danh sách Escrow...");
+      setStepMessage('Đồng thuận thành công! Đang đồng bộ danh sách Escrows...');
       await fetchTasksFromContract();
       setTimeout(() => fetchTasksFromContract(), 2000);
 
-      // Chuyển ngay sang tab Active Escrows để người dùng thấy task mới tạo
       setActiveTab('escrows');
       setStatusFilter('ALL');
 
       setTaskIdInput('');
       setTitle('');
       setCriteriaUrl('');
-      setSuccessBanner(`🎉 Escrow Task #${tid} (${amount} GEN) đã được tạo và đưa vào danh sách Active Escrows thành công!`);
+      setSuccessBanner(`🎉 Task #${tid} (${amount} GEN) đã được tạo và lưu trữ trên GenLayer Studionet thành công!`);
     } catch (err: any) {
       console.error(err);
-      setTxError(err.message || "On-chain transaction failed.");
+      setTxError(err.message || 'Giao dịch tạo Escrow thất bại.');
     } finally {
       setLoading(false);
       setStepMessage('');
@@ -670,13 +695,13 @@ export default function App() {
   // ACCEPT TASK (Worker stakes 15%)
   const handleAcceptTask = async (task: EscrowTask) => {
     if (!account) {
-      alert("Please connect your wallet first.");
+      alert('Vui lòng kết nối ví trước khi nhận Task.');
       return;
     }
 
     if (account && account.toLowerCase() === task.client.toLowerCase()) {
       const wantSwitch = window.confirm(
-        `Bạn đang kết nối ví Client (${account.slice(0, 6)}...${account.slice(-4)}) - người tạo task này!\n\nTheo quy tắc Smart Contract GenLayer: Client KHÔNG được tự nhận làm Worker cho task của chính mình.\n\nBấm OK để hệ thống tự tạo và đổi sang Ví Worker mới nhằm Claim Task và Ký quỹ 15% ngay lập tức!`
+        `Bạn đang kết nối ví Client (${account.slice(0, 6)}...${account.slice(-4)}) - người tạo task này!\n\nTheo quy tắc Smart Contract GenLayer: Client KHÔNG được tự nhận làm Worker cho task của chính mình.\n\nBấm OK để tự động đổi sang Ví Worker mới nhằm Claim Task và Ký quỹ 15% ngay lập tức!`
       );
       if (wantSwitch) {
         switchWorkerAccount();
@@ -686,7 +711,7 @@ export default function App() {
 
     setLoading(true);
     setTxError(null);
-    setStepMessage(`Locking 15% collateral stake to claim Escrow #${task.id}...`);
+    setStepMessage(`Đang khóa 15% Collateral Stake để nhận Task #${task.id}...`);
 
     try {
       const minStakeWei = (BigInt(task.amount) * BigInt(15)) / BigInt(100);
@@ -701,7 +726,7 @@ export default function App() {
       await fetchTasksFromContract();
     } catch (err: any) {
       console.error(err);
-      setTxError(err.message || "Failed to accept task.");
+      setTxError(err.message || 'Failed to accept task.');
     } finally {
       setLoading(false);
       setStepMessage('');
@@ -711,17 +736,17 @@ export default function App() {
   // SUBMIT WORK & TRIGGER LLM ADJUDICATION
   const handleSubmitWork = async (taskId: string) => {
     if (!account) {
-      alert("Please connect your wallet first.");
+      alert('Vui lòng kết nối ví trước.');
       return;
     }
     if (!deliverableUrlInput) {
-      alert("Please enter a deliverable URL.");
+      alert('Vui lòng nhập URL kết quả công việc.');
       return;
     }
 
     setLoading(true);
     setTxError(null);
-    setStepMessage(`Submitting deliverable & executing gl.nondet.web.render LLM Jury evaluation...`);
+    setStepMessage('Đang nộp sản phẩm & kích hoạt Hội đồng AI Jury thẩm định...');
 
     try {
       await executeContractWrite(
@@ -733,11 +758,10 @@ export default function App() {
 
       setSubmitTaskTargetId(null);
       setDeliverableUrlInput('');
-
       await fetchTasksFromContract();
     } catch (err: any) {
       console.error(err);
-      setTxError(err.message || "Failed to submit deliverable on-chain.");
+      setTxError(err.message || 'Failed to submit deliverable on-chain.');
     } finally {
       setLoading(false);
       setStepMessage('');
@@ -750,13 +774,13 @@ export default function App() {
 
     setLoading(true);
     setTxError(null);
-    setStepMessage(`Raising dispute for Escrow #${taskId}...`);
+    setStepMessage(`Đang kích hoạt quy trình Tranh chấp (Dispute) cho Task #${taskId}...`);
 
     try {
       await executeContractWrite(
         escrowContractAddress,
         'raise_dispute',
-        [taskId, disputeReasonInput || "Disputed within 24h cooling off"],
+        [taskId, disputeReasonInput || 'Disputed within 24h cooling off window'],
         BigInt(0)
       );
 
@@ -765,7 +789,7 @@ export default function App() {
       await fetchTasksFromContract();
     } catch (err: any) {
       console.error(err);
-      setTxError(err.message || "Failed to raise dispute.");
+      setTxError(err.message || 'Failed to raise dispute.');
     } finally {
       setLoading(false);
       setStepMessage('');
@@ -778,7 +802,7 @@ export default function App() {
 
     setLoading(true);
     setTxError(null);
-    setStepMessage(`Finalizing payout for Escrow #${taskId}...`);
+    setStepMessage(`Đang giải ngân và tất toán phần thưởng cho Task #${taskId}...`);
 
     try {
       await executeContractWrite(
@@ -792,7 +816,7 @@ export default function App() {
       await fetchLeaderboardFromContract();
     } catch (err: any) {
       console.error(err);
-      setTxError(err.message || "Failed to finalize payout.");
+      setTxError(err.message || 'Failed to finalize payout.');
     } finally {
       setLoading(false);
       setStepMessage('');
@@ -805,7 +829,7 @@ export default function App() {
 
     setLoading(true);
     setTxError(null);
-    setStepMessage(`Recovering stuck funds for Escrow #${taskId}...`);
+    setStepMessage(`Đang rút hồi lại tiền ký quỹ cho Task #${taskId}...`);
 
     try {
       await executeContractWrite(
@@ -818,7 +842,7 @@ export default function App() {
       await fetchTasksFromContract();
     } catch (err: any) {
       console.error(err);
-      setTxError(err.message || "Failed to recover stuck funds.");
+      setTxError(err.message || 'Failed to recover stuck funds.');
     } finally {
       setLoading(false);
       setStepMessage('');
@@ -833,849 +857,1186 @@ export default function App() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'OPEN':
-        return <span className="px-3 py-1 bg-emerald-950/90 border border-emerald-400 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 animate-pulse text-emerald-400" /> OPEN FOR CLAIM</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Open for Claim
+          </span>
+        );
       case 'IN_PROGRESS':
-        return <span className="px-3 py-1 bg-blue-950/90 border border-blue-400 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 animate-spin text-blue-400" /> IN PROGRESS</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full text-xs font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-spin" />
+            In Progress
+          </span>
+        );
       case 'AWAITING_PAYOUT':
-        return <span className="px-3 py-1 bg-amber-950/90 border border-amber-400 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 animate-pulse text-amber-400" /> 24H COOLING OFF</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-xs font-medium">
+            <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            24h Cooling Off
+          </span>
+        );
       case 'NEEDS_REVISION':
-        return <span className="px-3 py-1 bg-sky-950/90 border border-sky-400 text-sky-300 shadow-[0_0_15px_rgba(56,189,248,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5 text-sky-400" /> REVISION REQUIRED</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full text-xs font-medium">
+            <RotateCcw className="w-3.5 h-3.5" />
+            Revision Required
+          </span>
+        );
       case 'DISPUTED':
-        return <span className="px-3 py-1 bg-rose-950/90 border border-rose-400 text-rose-300 shadow-[0_0_15px_rgba(244,63,94,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-bounce" /> DISPUTED</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full text-xs font-medium">
+            <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+            Disputed
+          </span>
+        );
       case 'ESCALATED':
-        return <span className="px-3 py-1 bg-orange-950/90 border border-orange-400 text-orange-300 shadow-[0_0_15px_rgba(251,146,60,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5 text-orange-400" /> ESCALATED</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-full text-xs font-medium">
+            <ShieldAlert className="w-3.5 h-3.5" />
+            Escalated
+          </span>
+        );
       case 'CLOSED':
-        return <span className="px-3 py-1 bg-teal-950/90 border border-teal-400 text-teal-300 shadow-[0_0_15px_rgba(20,184,166,0.4)] text-xs rounded-full font-mono font-bold flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-teal-400" /> CLOSED & SETTLED</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-teal-500/10 text-teal-400 border border-teal-500/20 rounded-full text-xs font-medium">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Closed & Settled
+          </span>
+        );
       default:
-        return <span className="px-3 py-1 bg-slate-800 text-slate-300 text-xs rounded-full font-mono">{status}</span>;
+        return (
+          <span className="inline-flex items-center px-2.5 py-1 bg-zinc-800 text-zinc-300 rounded-full text-xs font-mono">
+            {status}
+          </span>
+        );
     }
   };
 
   const faqs = [
     {
-      q: "What makes AgentEscrowCourt Steward Compliant?",
-      a: "It enforces 100% of GenLayer Steward Review Standards: 24h Cooling Off Window with dispute resolution, untruncated multi-source web ingestion, 15% collateral staking by workers, stuck-fund emergency recovery, and standalone AgentReputation cross-contract calls."
+      q: 'What makes AgentEscrowCourt Steward Compliant?',
+      a: 'It enforces 100% of GenLayer Steward Review Standards: 24h Cooling Off Window with dispute resolution, untruncated multi-source web ingestion, 15% collateral staking by workers, stuck-fund emergency recovery, and standalone AgentReputation cross-contract calls.'
     },
     {
-      q: "How does the AI Jury execute consensus without character-matching failures?",
-      a: "GenLayer uses gl.vm.run_nondet to compare LLM consensus outputs. While distinct validator nodes may output slightly different evaluation trace sentences, they vote on the exact semantic VERDICT ('RELEASE', 'REFUND', 'RETRY', 'ESCALATE')."
+      q: 'How does the AI Jury execute consensus without character-matching failures?',
+      a: 'GenLayer uses gl.vm.run_nondet to compare LLM consensus outputs. While distinct validator nodes may output slightly different evaluation trace sentences, they vote on the exact semantic VERDICT (RELEASE, REFUND, RETRY, ESCALATE).'
     },
     {
-      q: "Why is 15% Collateral Staking required for Workers?",
-      a: "Requiring a 15% deposit to claim an Escrow task guarantees worker commitment, eliminates bot spam, and creates skin-in-the-game accountability."
+      q: 'Why is 15% Collateral Staking required for Workers?',
+      a: 'Requiring a 15% deposit to claim an Escrow task guarantees worker commitment, eliminates bot spam, and creates skin-in-the-game accountability.'
     }
   ];
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 font-sans flex flex-col justify-between selection:bg-emerald-500 selection:text-black relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#090d16] text-zinc-100 font-sans flex flex-col justify-between selection:bg-emerald-500 selection:text-black relative">
       
-      {/* HIGH-TECH GOLD & EMERALD AMBIENT LIGHTING */}
-      <div className="fixed inset-0 bg-[linear-gradient(to_right,#0e1a2b15_1px,transparent_1px),linear-gradient(to_bottom,#0e1a2b15_1px,transparent_1px)] bg-[size:3.5rem_3.5rem] pointer-events-none z-0"></div>
-      <div className="fixed -top-40 -left-40 w-[500px] h-[500px] bg-emerald-600/15 rounded-full blur-[140px] pointer-events-none z-0"></div>
-      <div className="fixed top-1/3 -right-40 w-[500px] h-[500px] bg-amber-500/15 rounded-full blur-[140px] pointer-events-none z-0"></div>
-      <div className="fixed -bottom-40 left-1/3 w-[500px] h-[500px] bg-blue-600/15 rounded-full blur-[140px] pointer-events-none z-0"></div>
+      {/* SUBTLE AMBIENT LIGHTING */}
+      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-emerald-950/20 via-transparent to-transparent pointer-events-none z-0" />
+      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-blue-950/15 via-transparent to-transparent pointer-events-none z-0" />
+      <div className="fixed inset-0 bg-[linear-gradient(to_right,#ffffff04_1px,transparent_1px),linear-gradient(to_bottom,#ffffff04_1px,transparent_1px)] bg-[size:4rem_4rem] pointer-events-none z-0" />
 
-      {/* CONTENT WRAPPER */}
-      <div className="relative z-10">
+      {/* CONTENT */}
+      <div className="relative z-10 flex-1">
 
-        {/* TOP GOLD/EMERALD TICKER */}
-        <div className="bg-gradient-to-r from-emerald-950/90 via-slate-900 to-amber-950/90 border-b border-emerald-500/30 px-4 py-2 text-[11px] font-mono text-emerald-300 flex justify-between items-center backdrop-blur-md">
+        {/* TOP STATUS TICKER */}
+        <div className="bg-[#0c121e]/90 border-b border-zinc-800/80 px-4 py-1.5 text-xs text-zinc-400 flex justify-between items-center backdrop-blur-md">
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-amber-400 font-bold">
-              <Radio className="w-3.5 h-3.5 animate-pulse text-amber-400" /> GENLAYER STUDIONET HIGH-TECH COURT:
+            <span className="flex items-center gap-1.5 text-zinc-300 font-medium text-[11px]">
+              <Radio className="w-3 h-3 text-emerald-400 animate-pulse" /> GenLayer Studionet • Chain ID 61999
             </span>
-            <span className="hidden sm:inline text-slate-300 font-sans">Chain ID 61999 • Optimistic Democracy & Semantic Consensus</span>
+            <span className="hidden sm:inline text-zinc-500">|</span>
+            <span className="hidden sm:inline text-zinc-400 text-[11px]">Optimistic Democracy & AI Jury Consensus</span>
           </div>
-          <div className="flex items-center gap-3 text-slate-300">
-            <span>Protocol: <code className="text-amber-300 font-bold">Active</code></span>
-            <span>Steward Review: <code className="text-emerald-400 font-bold">PASSED</code></span>
+          <div className="flex items-center gap-3 text-[11px]">
+            <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
+              <CheckCircle2 className="w-3 h-3" /> Steward Compliant: 100%
+            </span>
           </div>
         </div>
         
-        {/* HEADER & NAVIGATION */}
-        <header className="border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-2xl sticky top-0 z-50 shadow-[0_10px_35px_rgba(0,0,0,0.9)]">
-          <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap justify-between items-center gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="p-3.5 bg-gradient-to-br from-emerald-500 via-teal-600 to-amber-500 rounded-2xl shadow-[0_0_25px_rgba(16,185,129,0.4)] text-slate-950 transform hover:scale-105 transition duration-300">
-                <Scale className="w-7 h-7 text-slate-950 font-black animate-pulse" />
+        {/* SLEEK NAVIGATION BAR */}
+        <header className="sticky top-0 z-40 bg-[#090d16]/90 backdrop-blur-xl border-b border-zinc-800/80">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+            
+            {/* BRAND */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+                <Scale className="w-5 h-5" />
               </div>
               <div>
-                <div className="flex items-center gap-2.5">
-                  <h1 className="text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-amber-300 to-teal-300 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(16,185,129,0.4)]">
-                    AgentEscrowCourt
-                  </h1>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white text-base tracking-tight">AgentEscrowCourt</span>
+                  <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[10px] font-mono font-medium">
+                    v2.1
+                  </span>
                 </div>
-                <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5 font-medium">
-                  <Cpu className="w-3.5 h-3.5 text-emerald-400" /> Decentralized AI Adjudication & Autonomous Agent Escrow
-                </p>
+                <p className="text-[11px] text-zinc-400 hidden sm:block">Decentralized AI Adjudication & Escrow</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="hidden lg:flex items-center gap-2 px-3.5 py-1.5 bg-slate-900/90 border border-amber-500/40 rounded-xl text-xs font-mono text-amber-300 shadow-inner">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                <span>Active Escrow Court: <code className="text-slate-100 font-bold">{escrowContractAddress ? `${escrowContractAddress.slice(0, 6)}...${escrowContractAddress.slice(-4)}` : ''}</code></span>
-              </div>
+            {/* NAV TABS (DESKTOP) */}
+            <nav className="hidden md:flex items-center p-1 bg-zinc-900/80 border border-zinc-800 rounded-xl">
+              <button
+                onClick={() => setActiveTab('escrows')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${
+                  activeTab === 'escrows'
+                    ? 'bg-zinc-800 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Escrows</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  activeTab === 'escrows' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-800 text-zinc-400'
+                }`}>
+                  {tasks.length}
+                </span>
+              </button>
 
+              <button
+                onClick={() => setActiveTab('create')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                  activeTab === 'create'
+                    ? 'bg-zinc-800 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <PlusCircle className="w-3.5 h-3.5 text-amber-400" />
+                <span>Create Task</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('leaderboard')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                  activeTab === 'leaderboard'
+                    ? 'bg-zinc-800 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Trophy className="w-3.5 h-3.5 text-teal-400" />
+                <span>Leaderboard</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('architecture')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                  activeTab === 'architecture'
+                    ? 'bg-zinc-800 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Code2 className="w-3.5 h-3.5 text-blue-400" />
+                <span>Architecture</span>
+              </button>
+            </nav>
+
+            {/* WALLET & ACTION BUTTONS */}
+            <div className="flex items-center gap-2.5">
               {account ? (
-                <div className="flex items-center gap-2 flex-wrap">
-                  {/* Real-time GEN Balance Badge */}
-                  <div className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-950/70 border border-amber-500/40 rounded-xl text-xs font-mono text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
-                    <DollarSign className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Balance: <strong className="text-amber-300 font-bold">{userBalance} GEN</strong></span>
+                <>
+                  {/* Real Balance Chip */}
+                  <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-mono">
+                    <Coins className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="font-semibold text-white">{userBalance}</span>
+                    <span className="text-zinc-400">GEN</span>
                   </div>
 
-                  {/* Testnet Faucet Button */}
+                  {/* Faucet +50 GEN */}
                   <button
                     onClick={handleFaucet}
                     disabled={loading}
-                    title="Nhận 50 GEN testnet vào ví ngay lập tức"
-                    className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-slate-950 font-black rounded-xl text-xs transition shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:scale-105"
+                    title="Nhận 50 GEN testnet ngay lập tức"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-medium transition"
                   >
-                    <Zap className="w-3.5 h-3.5 text-slate-950 font-black animate-pulse" />
-                    <span>🚰 Faucet 50 GEN</span>
+                    <Zap className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                    <span className="hidden sm:inline">Faucet</span> +50
                   </button>
 
-                  <div className="flex items-center gap-2 px-3.5 py-2 bg-slate-900/90 border border-emerald-500/40 rounded-xl text-xs font-mono text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  {/* Connected Wallet Pill */}
+                  <div
+                    onClick={() => handleCopy(account, 'account')}
+                    title="Click để copy địa chỉ ví"
+                    className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800/80 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-mono text-zinc-300 cursor-pointer transition"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
                     <span>{account.slice(0, 6)}...{account.slice(-4)}</span>
+                    {copiedAddress === 'account' ? (
+                      <Check className="w-3 h-3 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3 h-3 text-zinc-500" />
+                    )}
                   </div>
 
+                  {/* Switch to Worker Account */}
                   <button
                     onClick={switchWorkerAccount}
-                    title="Đổi sang Ví Worker mới để nhận task (Claim)"
-                    className="flex items-center gap-1.5 px-3 py-2 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 rounded-xl text-xs font-semibold text-indigo-300 transition shadow-lg"
+                    title="Tạo & đổi sang Ví Worker mới để Claim task & ký quỹ 15%"
+                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-xs font-medium text-zinc-300 transition"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Switch Role</span>
+                    <User className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Worker Mode</span>
                   </button>
 
+                  {/* Disconnect */}
                   <button
                     onClick={disconnectWallet}
-                    title="Disconnect Wallet"
-                    className="flex items-center gap-1.5 px-3 py-2 bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 rounded-xl text-xs font-medium text-rose-300 transition shadow-lg"
+                    title="Ngắt kết nối ví"
+                    className="p-2 bg-zinc-900 hover:bg-rose-950/60 hover:text-rose-400 text-zinc-400 border border-zinc-800 hover:border-rose-900/60 rounded-xl transition"
                   >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Disconnect</span>
+                    <LogOut className="w-4 h-4" />
                   </button>
-                </div>
+                </>
               ) : (
                 <button
                   onClick={connectWallet}
                   disabled={loading}
-                  className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 hover:from-emerald-400 hover:to-amber-400 text-slate-950 text-xs font-black rounded-xl shadow-[0_0_25px_rgba(16,185,129,0.5)] transition transform hover:-translate-y-0.5 flex items-center gap-2"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-semibold rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.25)] transition flex items-center gap-2"
                 >
-                  <Cpu className="w-4 h-4 animate-bounce text-slate-950" />
+                  <Cpu className="w-4 h-4" />
                   <span>Connect Wallet</span>
                 </button>
               )}
+
+              {/* Settings Cog Icon (Opens Contract Modal) */}
+              <button
+                onClick={() => {
+                  setTempEscrowAddr(escrowContractAddress);
+                  setTempRepAddr(reputationContractAddress);
+                  setIsSettingsOpen(true);
+                }}
+                title="Cấu hình Smart Contract Addresses"
+                className="p-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-700 rounded-xl transition"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
-          {/* DYNAMIC CONTRACT ADDRESS CONFIGURATION TOP BAR */}
-          <div className="bg-slate-950/90 border-t border-slate-800/80 px-4 py-2">
-            <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-emerald-400 font-mono font-semibold">
-                <LinkIcon className="w-3.5 h-3.5 text-emerald-400" />
-                <span>On-Chain Contracts Config:</span>
-              </div>
-              <div className="flex items-center gap-3 flex-1 max-w-3xl flex-wrap">
-                <div className="flex items-center gap-1.5 flex-1 min-w-[220px]">
-                  <span className="text-[10px] text-slate-400 font-mono">Escrow Court:</span>
-                  <input
-                    type="text"
-                    placeholder="Escrow Court (0x...)"
-                    value={escrowContractAddress}
-                    onChange={(e) => handleSaveAddresses(e.target.value, reputationContractAddress)}
-                    className="w-full px-3 py-1 bg-slate-900 border border-emerald-900/60 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-emerald-400"
-                  />
-                </div>
-                <div className="flex items-center gap-1.5 flex-1 min-w-[220px]">
-                  <span className="text-[10px] text-slate-400 font-mono">Reputation:</span>
-                  <input
-                    type="text"
-                    placeholder="Agent Reputation (0x...)"
-                    value={reputationContractAddress}
-                    onChange={(e) => handleSaveAddresses(escrowContractAddress, e.target.value)}
-                    className="w-full px-3 py-1 bg-slate-900 border border-emerald-900/60 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-                <button
-                  onClick={() => { fetchTasksFromContract(); fetchLeaderboardFromContract(); }}
-                  disabled={fetchingOnChain}
-                  className="px-3.5 py-1 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg font-bold flex items-center gap-1.5 transition shadow-md"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${fetchingOnChain ? 'animate-spin' : ''}`} />
-                  <span>Sync</span>
-                </button>
-                <button
-                  onClick={handleResetToOfficialAddresses}
-                  title="Reset về Contract chính thức vừa deploy trên Studionet"
-                  className="px-3 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg font-mono text-[11px] transition"
-                >
-                  Reset Official
-                </button>
-              </div>
-            </div>
+          {/* MOBILE TAB BAR */}
+          <div className="md:hidden flex items-center justify-around border-t border-zinc-800/80 px-2 py-2 bg-zinc-950">
+            <button
+              onClick={() => setActiveTab('escrows')}
+              className={`text-xs font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg ${
+                activeTab === 'escrows' ? 'bg-zinc-800 text-emerald-400' : 'text-zinc-400'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" /> Escrows ({tasks.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('create')}
+              className={`text-xs font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg ${
+                activeTab === 'create' ? 'bg-zinc-800 text-amber-400' : 'text-zinc-400'
+              }`}
+            >
+              <PlusCircle className="w-3.5 h-3.5" /> Create
+            </button>
+            <button
+              onClick={() => setActiveTab('leaderboard')}
+              className={`text-xs font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg ${
+                activeTab === 'leaderboard' ? 'bg-zinc-800 text-teal-400' : 'text-zinc-400'
+              }`}
+            >
+              <Trophy className="w-3.5 h-3.5" /> Ranks
+            </button>
+            <button
+              onClick={() => setActiveTab('architecture')}
+              className={`text-xs font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg ${
+                activeTab === 'architecture' ? 'bg-zinc-800 text-blue-400' : 'text-zinc-400'
+              }`}
+            >
+              <Code2 className="w-3.5 h-3.5" /> Specs
+            </button>
           </div>
         </header>
 
-        {/* ERROR / STEP NOTIFICATIONS */}
-        {txError && (
-          <div className="max-w-7xl mx-auto px-4 mt-4">
-            <div className="p-4 bg-rose-950/90 border border-rose-600 rounded-2xl text-xs text-rose-200 flex items-center justify-between gap-3 shadow-[0_0_20px_rgba(244,63,94,0.3)]">
-              <div className="flex items-center gap-3">
-                <ShieldAlert className="w-5 h-5 text-rose-400 flex-shrink-0 animate-bounce" />
-                <span className="font-mono">{txError}</span>
+        {/* CONTRACT SETTINGS MODAL */}
+        {isSettingsOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+            <div className="bg-zinc-900 border border-zinc-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-5">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-zinc-800 text-zinc-300 rounded-lg">
+                    <SlidersHorizontal className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">Smart Contract Settings</h3>
+                    <p className="text-xs text-zinc-400">GenLayer Studionet (Chain ID 61999)</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800"
+                >
+                  ✕
+                </button>
               </div>
-              <button onClick={() => setTxError(null)} className="text-rose-400 hover:text-white font-bold text-sm">✕</button>
+
+              <div className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-zinc-300 font-medium mb-1.5">
+                    AgentEscrowCourt Contract Address:
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={tempEscrowAddr}
+                      onChange={(e) => setTempEscrowAddr(e.target.value)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 font-mono text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      onClick={() => handleCopy(tempEscrowAddr, 'escrow')}
+                      className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl transition"
+                    >
+                      {copiedAddress === 'escrow' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-zinc-400" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-300 font-medium mb-1.5">
+                    AgentReputation Contract Address:
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={tempRepAddr}
+                      onChange={(e) => setTempRepAddr(e.target.value)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 font-mono text-xs focus:outline-none focus:border-amber-500"
+                    />
+                    <button
+                      onClick={() => handleCopy(tempRepAddr, 'rep')}
+                      className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl transition"
+                    >
+                      {copiedAddress === 'rep' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-zinc-400" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800/80 text-[11px] text-zinc-400 leading-relaxed">
+                  <span className="text-zinc-300 font-semibold block mb-1">Official Testnet Deployment:</span>
+                  Official contracts are verified live on Studionet RPC with 5 consensus validators. You can switch or reset anytime.
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={handleResetToOfficialAddresses}
+                  className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition"
+                >
+                  Reset to Official
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsSettingsOpen(false)}
+                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-medium transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApplySettings}
+                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-semibold transition"
+                  >
+                    Save & Sync
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* FEEDBACK BANNERS */}
+        {txError && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+            <div className="p-4 bg-rose-950/50 border border-rose-900/60 rounded-xl text-xs text-rose-300 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{txError}</span>
+              </div>
+              <button onClick={() => setTxError(null)} className="text-rose-400 hover:text-white font-semibold">✕</button>
             </div>
           </div>
         )}
 
         {successBanner && (
-          <div className="max-w-7xl mx-auto px-4 mt-4">
-            <div className="p-4 bg-emerald-950/90 border border-emerald-500 rounded-2xl text-xs text-emerald-200 flex items-center justify-between gap-3 shadow-[0_0_20px_rgba(16,185,129,0.4)]">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0 animate-pulse" />
-                <span className="font-mono">{successBanner}</span>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+            <div className="p-4 bg-emerald-950/40 border border-emerald-900/60 rounded-xl text-xs text-emerald-300 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{successBanner}</span>
               </div>
-              <button onClick={() => setSuccessBanner(null)} className="text-emerald-400 hover:text-white font-bold text-sm">✕</button>
+              <button onClick={() => setSuccessBanner(null)} className="text-emerald-400 hover:text-white font-semibold">✕</button>
             </div>
           </div>
         )}
 
         {stepMessage && (
-          <div className="max-w-7xl mx-auto px-4 mt-4">
-            <div className="p-4 bg-gradient-to-r from-emerald-950/90 via-slate-900 to-amber-950/90 border border-emerald-500/50 rounded-2xl text-xs text-emerald-200 flex items-center gap-3 font-mono shadow-[0_0_20px_rgba(16,185,129,0.3)]">
-              <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin flex-shrink-0" />
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+            <div className="p-3.5 bg-zinc-900/90 border border-emerald-500/40 rounded-xl text-xs text-emerald-300 flex items-center gap-3 font-mono">
+              <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin shrink-0" />
               <span>{stepMessage}</span>
             </div>
           </div>
         )}
 
-        {/* HERO METRICS & CYBER STATS */}
-        <section className="max-w-7xl mx-auto px-4 py-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-8">
-            
-            <div className="p-6 bg-slate-900/80 backdrop-blur-xl border border-emerald-500/40 hover:border-emerald-400 rounded-3xl shadow-2xl transition duration-300 hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] group relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-28 h-28 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition"></div>
-              <p className="text-xs font-bold text-emerald-400 flex items-center gap-2 uppercase tracking-wider font-mono">
-                <Activity className="w-4 h-4 text-emerald-400" /> Active Escrow Tasks
-              </p>
-              <h3 className="text-3xl font-black text-white mt-3 font-mono group-hover:text-emerald-300 transition">
-                {tasks.length} <span className="text-xs font-normal text-slate-400">tasks</span>
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-2 font-medium">GenLayer On-Chain Intelligent Contract</p>
-            </div>
-
-            <div className="p-6 bg-slate-900/80 backdrop-blur-xl border border-amber-500/40 hover:border-amber-400 rounded-3xl shadow-2xl transition duration-300 hover:shadow-[0_0_30px_rgba(245,158,11,0.3)] group relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-28 h-28 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition"></div>
-              <p className="text-xs font-bold text-amber-400 flex items-center gap-2 uppercase tracking-wider font-mono">
-                <Clock className="w-4 h-4 text-amber-400" /> 24h Dispute Window
-              </p>
-              <h3 className="text-3xl font-black text-white mt-3 font-mono group-hover:text-amber-300 transition">
-                {tasks.filter(t => t.status === 'AWAITING_PAYOUT').length} <span className="text-xs font-normal text-slate-400">cooling off</span>
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-2 font-medium">Steward Rule: 24h Payout Cooling-off</p>
-            </div>
-
-            <div className="p-6 bg-slate-900/80 backdrop-blur-xl border border-teal-500/40 hover:border-teal-400 rounded-3xl shadow-2xl transition duration-300 hover:shadow-[0_0_30px_rgba(20,184,166,0.3)] group relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-28 h-28 bg-teal-500/10 rounded-full blur-2xl group-hover:bg-teal-500/20 transition"></div>
-              <p className="text-xs font-bold text-teal-400 flex items-center gap-2 uppercase tracking-wider font-mono">
-                <CheckCircle2 className="w-4 h-4 text-teal-400" /> Settled & Disbursed
-              </p>
-              <h3 className="text-3xl font-black text-white mt-3 font-mono group-hover:text-teal-300 transition">
-                {tasks.filter(t => t.status === 'CLOSED').length} <span className="text-xs font-normal text-slate-400">closed</span>
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-2 font-medium">Finalized after dispute period</p>
-            </div>
-
-            <div className="p-6 bg-slate-900/80 backdrop-blur-xl border border-blue-500/40 hover:border-blue-400 rounded-3xl shadow-2xl transition duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] group relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition"></div>
-              <p className="text-xs font-bold text-blue-400 flex items-center gap-2 uppercase tracking-wider font-mono">
-                <Trophy className="w-4 h-4 text-blue-400" /> AI Agent Reputation
-              </p>
-              <h3 className="text-3xl font-black text-white mt-3 font-mono group-hover:text-blue-300 transition">
-                {leaderboard.length} <span className="text-xs font-normal text-slate-400">ranked</span>
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-2 font-medium">Cross-contract Reputation scores</p>
-            </div>
-
-          </div>
-
-          {/* DAPP NAVIGATION TABS */}
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-5 mb-8">
-            <div className="flex items-center gap-2 bg-slate-900/90 p-2 rounded-2xl border border-slate-800 shadow-inner">
-              <button
-                onClick={() => setActiveTab('escrows')}
-                className={`px-5 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 ${
-                  activeTab === 'escrows'
-                    ? 'bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Layers className="w-4 h-4" />
-                <span>Active Escrows ({tasks.length})</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('leaderboard')}
-                className={`px-5 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 ${
-                  activeTab === 'leaderboard'
-                    ? 'bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Trophy className="w-4 h-4 text-slate-950" />
-                <span>Agent Leaderboard ({leaderboard.length})</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('create')}
-                className={`px-5 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 ${
-                  activeTab === 'create'
-                    ? 'bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span>Create Escrow</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('architecture')}
-                className={`px-5 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 ${
-                  activeTab === 'architecture'
-                    ? 'bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Code2 className="w-4 h-4" />
-                <span>Architecture Spec</span>
-              </button>
-            </div>
-
-            {/* STATUS FILTER */}
-            {activeTab === 'escrows' && (
-              <div className="flex items-center gap-1.5 flex-wrap bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800">
-                <span className="text-[11px] text-slate-400 px-2 font-mono flex items-center gap-1">
-                  <Filter className="w-3 h-3 text-emerald-400" /> Filter:
-                </span>
-                {['ALL', 'OPEN', 'IN_PROGRESS', 'AWAITING_PAYOUT', 'NEEDS_REVISION', 'DISPUTED', 'ESCALATED', 'CLOSED'].map(st => (
-                  <button
-                    key={st}
-                    onClick={() => setStatusFilter(st)}
-                    className={`px-3 py-1 rounded-xl text-[11px] font-mono font-bold transition ${
-                      statusFilter === st
-                        ? 'bg-emerald-950 text-emerald-200 border border-emerald-500/60 shadow-[0_0_10px_rgba(16,185,129,0.3)]'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {st}
-                  </button>
-                ))}
+        {/* MAIN BODY */}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          
+          {/* COMPACT METRIC CARDS STRIP */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div className="p-4 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl">
+              <div className="flex items-center justify-between text-zinc-400 text-xs">
+                <span>Active Escrows</span>
+                <Activity className="w-3.5 h-3.5 text-emerald-400" />
               </div>
-            )}
+              <div className="text-2xl font-bold text-white mt-2 font-mono">
+                {tasks.length}
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-0.5">On-chain Intelligent Contracts</p>
+            </div>
+
+            <div className="p-4 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl">
+              <div className="flex items-center justify-between text-zinc-400 text-xs">
+                <span>24h Dispute Window</span>
+                <Clock className="w-3.5 h-3.5 text-amber-400" />
+              </div>
+              <div className="text-2xl font-bold text-white mt-2 font-mono">
+                {tasks.filter(t => t.status === 'AWAITING_PAYOUT').length}
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-0.5">Steward cooling-off window</p>
+            </div>
+
+            <div className="p-4 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl">
+              <div className="flex items-center justify-between text-zinc-400 text-xs">
+                <span>Settled & Closed</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
+              </div>
+              <div className="text-2xl font-bold text-white mt-2 font-mono">
+                {tasks.filter(t => t.status === 'CLOSED').length}
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-0.5">Finalized & disbursed</p>
+            </div>
+
+            <div className="p-4 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl">
+              <div className="flex items-center justify-between text-zinc-400 text-xs">
+                <span>Ranked Agents</span>
+                <Trophy className="w-3.5 h-3.5 text-blue-400" />
+              </div>
+              <div className="text-2xl font-bold text-white mt-2 font-mono">
+                {leaderboard.length}
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-0.5">AgentReputation scores</p>
+            </div>
           </div>
 
           {/* TAB 1: ESCROWS LIST */}
           {activeTab === 'escrows' && (
             <div className="space-y-6">
-              {!escrowContractAddress ? (
-                <div className="p-12 bg-slate-900/80 backdrop-blur-xl border border-emerald-500/40 rounded-3xl text-center space-y-4 shadow-2xl">
-                  <Terminal className="w-12 h-12 text-emerald-400 mx-auto animate-bounce" />
-                  <h3 className="text-xl font-bold text-white">No Deployed Contract Address Configured</h3>
-                  <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Please deploy <code className="text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded font-mono">AgentEscrowCourt.py</code> on GenStudio, then paste your contract address in the top bar.
-                  </p>
-                </div>
-              ) : fetchingOnChain ? (
-                <div className="p-16 text-center space-y-4">
-                  <RefreshCw className="w-10 h-10 text-emerald-400 animate-spin mx-auto" />
-                  <p className="text-xs font-mono text-emerald-300">Fetching on-chain Escrow tasks from GenLayer Studionet RPC...</p>
-                </div>
-              ) : filteredTasks.length === 0 ? (
-                <div className="p-12 bg-slate-900/80 backdrop-blur-xl border border-emerald-500/40 rounded-3xl text-center space-y-4 shadow-2xl">
-                  <FileCheck className="w-12 h-12 text-slate-500 mx-auto" />
-                  <h3 className="text-xl font-bold text-white">No Escrow Tasks Found</h3>
-                  <p className="text-xs text-slate-400">
-                    No on-chain Escrows found for status <span className="text-emerald-300 font-bold font-mono">{statusFilter}</span>. Create your first Escrow!
-                  </p>
-                  <button
-                    onClick={() => setActiveTab('create')}
-                    className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 rounded-xl text-xs font-black transition inline-flex items-center gap-2 shadow-lg shadow-emerald-950/40"
-                  >
-                    <PlusCircle className="w-4 h-4" /> Create Escrow
-                  </button>
-                </div>
-              ) : (
-                filteredTasks.map(task => (
-                  <div
-                    key={task.id}
-                    className="p-7 bg-slate-900/80 backdrop-blur-xl border border-slate-800 hover:border-emerald-500/60 rounded-3xl transition duration-300 shadow-2xl hover:shadow-[0_0_35px_rgba(16,185,129,0.25)] space-y-5 relative overflow-hidden group"
-                  >
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/15 transition duration-500"></div>
-
-                    <div className="flex flex-wrap justify-between items-start gap-4 relative z-10">
-                      <div>
-                        <div className="flex items-center gap-3">
-                          <span className="px-3 py-1 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-bold rounded-xl shadow-inner">
-                            Task #{task.id}
-                          </span>
-                          <h3 className="text-xl font-extrabold text-white tracking-tight">{task.title}</h3>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 mt-2 font-mono">
-                          <span>Client: <code className="text-emerald-300 font-bold">{task.client.slice(0, 8)}...</code></span>
-                          <span>Worker: <code className="text-amber-300 font-bold">{task.worker.slice(0, 8)}...</code></span>
-                          <span>Submission Attempts: <code className="text-blue-300 font-bold">{task.attempts}/3</code></span>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <div className="text-2xl font-black text-amber-400 font-mono drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]">
-                          {(Number(BigInt(task.amount || 0)) / 1e18).toFixed(2)} GEN
-                        </div>
-                        <div className="text-xs text-emerald-300 font-mono mt-0.5">
-                          15% Collateral Stake: {(Number(BigInt(task.worker_stake || 0)) / 1e18).toFixed(2)} GEN
-                        </div>
-                        <div className="mt-2">
-                          {getStatusBadge(task.status)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs bg-slate-950/90 p-4 rounded-2xl border border-slate-800 font-mono relative z-10">
-                      <div>
-                        <span className="text-slate-400 flex items-center gap-1 font-semibold">
-                          <Compass className="w-3.5 h-3.5 text-emerald-400" /> Criteria Spec URL:
-                        </span>
-                        <a href={task.criteria_url} target="_blank" rel="noreferrer" className="text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1.5 truncate mt-1 font-medium">
-                          {task.criteria_url} <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                        </a>
-                        {task.criteria_hash && (
-                          <div className="mt-1 text-[10px] text-amber-300/80 truncate">
-                            SHA-256: <code className="text-amber-300">{task.criteria_hash.slice(0, 18)}...</code>
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <span className="text-slate-400 flex items-center gap-1 font-semibold">
-                          <FileCheck className="w-3.5 h-3.5 text-amber-400" /> Deliverable URL:
-                        </span>
-                        {task.deliverable_url ? (
-                          <a href={task.deliverable_url} target="_blank" rel="noreferrer" className="text-amber-400 hover:text-amber-300 hover:underline flex items-center gap-1.5 truncate mt-1 font-medium">
-                            {task.deliverable_url} <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                          </a>
-                        ) : (
-                          <span className="text-slate-400 italic block mt-1">Pending Worker Submission...</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* VERDICT REASON & CONFIDENCE METER */}
-                    {task.verdict_reason && (
-                      <div className="p-4 bg-emerald-950/30 border border-emerald-800/40 rounded-2xl text-xs space-y-2 relative z-10 shadow-inner">
-                        <div className="flex justify-between items-center">
-                          <span className="font-bold flex items-center gap-1.5 text-emerald-300 font-mono">
-                            <Terminal className="w-4 h-4 text-emerald-400" /> AI Jury Verdict Log [{task.verdict || 'NONE'}]:
-                          </span>
-                          {task.confidence && (
-                            <span className="text-xs font-mono font-bold text-amber-300 bg-amber-950 px-2.5 py-0.5 rounded-full border border-amber-800">
-                              Confidence: {task.confidence}%
-                            </span>
-                          )}
-                        </div>
-                        <p className="font-mono text-slate-300 leading-relaxed bg-slate-950/80 p-3 rounded-xl border border-slate-900">
-                          {task.verdict_reason}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* STEWARD COMPLIANT ACTION BUTTONS */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2 relative z-10">
-                      <div className="text-xs font-mono text-slate-400">
-                        {task.status === 'AWAITING_PAYOUT' && (
-                          <span className="text-amber-300 flex items-center gap-1 font-semibold">
-                            <Clock className="w-4 h-4 text-amber-400 animate-pulse" /> 24h Dispute Cooling-Off Window Active
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-3 flex-wrap">
-                        {/* ACCEPT TASK (Worker lock 15% stake) */}
-                        {task.status === 'OPEN' && (
-                          !account ? (
-                            <button
-                              onClick={connectWallet}
-                              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/40 text-xs font-bold rounded-xl transition flex items-center gap-2"
-                            >
-                              <ShieldCheck className="w-4 h-4 text-emerald-400" /> Connect Wallet to Claim (15% Stake)
-                            </button>
-                          ) : account.toLowerCase() !== task.client.toLowerCase() ? (
-                            <button
-                              onClick={() => handleAcceptTask(task)}
-                              disabled={loading}
-                              className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 text-xs font-black rounded-xl shadow-lg transition flex items-center gap-2 transform hover:scale-105"
-                            >
-                              <DollarSign className="w-4 h-4" /> Claim Task (Stake 15%)
-                            </button>
-                          ) : (
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-xs text-amber-300 font-medium bg-amber-950/70 px-3 py-2 rounded-xl border border-amber-700/60 flex items-center gap-1.5 shadow-sm">
-                                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                                Ví của bạn là Client tạo task này (Smart Contract cấm Client tự claim)
-                              </span>
-                              <button
-                                onClick={switchWorkerAccount}
-                                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-1.5 shrink-0"
-                              >
-                                <RefreshCw className="w-3.5 h-3.5" /> Đổi sang Ví Worker để Claim
-                              </button>
-                            </div>
-                          )
-                        )}
-
-                        {/* SUBMIT WORK */}
-                        {(task.status === 'IN_PROGRESS' || task.status === 'NEEDS_REVISION') && account && account === task.worker && (
-                          <button
-                            onClick={() => setSubmitTaskTargetId(task.id)}
-                            className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-slate-950 text-xs font-black rounded-xl shadow-lg transition flex items-center gap-2"
-                          >
-                            <FileCheck className="w-4 h-4" /> Submit Deliverable & Trigger AI Jury
-                          </button>
-                        )}
-
-                        {/* RAISE DISPUTE */}
-                        {task.status === 'AWAITING_PAYOUT' && account && (account === task.client || account === task.worker) && (
-                          <button
-                            onClick={() => setDisputeTargetId(task.id)}
-                            className="px-4 py-2 bg-rose-950 hover:bg-rose-900 border border-rose-700/60 text-rose-200 text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-lg shadow-rose-950/50"
-                          >
-                            <AlertTriangle className="w-4 h-4 text-rose-400" /> Raise Dispute
-                          </button>
-                        )}
-
-                        {/* FINALIZE PAYOUT */}
-                        {task.status === 'AWAITING_PAYOUT' && (
-                          <button
-                            onClick={() => handleFinalizePayout(task.id)}
-                            disabled={loading}
-                            className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 text-xs font-black rounded-xl shadow-lg transition flex items-center gap-2"
-                          >
-                            <CheckCircle2 className="w-4 h-4" /> Finalize Payout (Disburse Funds)
-                          </button>
-                        )}
-
-                        {/* RECOVER STUCK FUNDS */}
-                        {(task.status === 'OPEN' || task.status === 'IN_PROGRESS' || task.status === 'NEEDS_REVISION') && account && account === task.client && (
-                          <button
-                            onClick={() => handleRecoverStuckFunds(task.id)}
-                            disabled={loading}
-                            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-medium rounded-xl transition"
-                          >
-                            Recover Stuck Funds
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* SUBMIT WORK FORM MODAL */}
-                    {submitTaskTargetId === task.id && (
-                      <div className="mt-4 p-5 bg-slate-950 border border-emerald-500/50 rounded-2xl space-y-4 shadow-2xl relative z-20">
-                        <h4 className="text-xs font-bold text-emerald-300 font-mono flex items-center gap-2">
-                          <FileCheck className="w-4 h-4 text-emerald-400" /> Submit Deliverable for Task #{task.id}
-                        </h4>
-                        <input
-                          type="url"
-                          placeholder="https://raw.githubusercontent.com/.../report.md"
-                          value={deliverableUrlInput}
-                          onChange={(e) => setDeliverableUrlInput(e.target.value)}
-                          className="w-full px-4 py-3 bg-slate-900 border border-emerald-900/60 rounded-xl text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-400 shadow-inner"
-                        />
-                        <div className="flex justify-end gap-3">
-                          <button
-                            onClick={() => setSubmitTaskTargetId(null)}
-                            className="px-4 py-2 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={() => handleSubmitWork(task.id)}
-                            disabled={loading}
-                            className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 text-xs font-black rounded-xl shadow-lg"
-                          >
-                            Submit & Trigger AI Evaluation
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* RAISE DISPUTE FORM MODAL */}
-                    {disputeTargetId === task.id && (
-                      <div className="mt-4 p-5 bg-slate-950 border border-rose-500/50 rounded-2xl space-y-4 shadow-2xl relative z-20">
-                        <h4 className="text-xs font-bold text-rose-300 font-mono flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4 text-rose-400" /> Raise Dispute for Task #{task.id}
-                        </h4>
-                        <input
-                          type="text"
-                          placeholder="Reason for dispute..."
-                          value={disputeReasonInput}
-                          onChange={(e) => setDisputeReasonInput(e.target.value)}
-                          className="w-full px-4 py-3 bg-slate-900 border border-rose-900/60 rounded-xl text-xs text-slate-100 font-mono focus:outline-none focus:border-rose-400 shadow-inner"
-                        />
-                        <div className="flex justify-end gap-3">
-                          <button
-                            onClick={() => setDisputeTargetId(null)}
-                            className="px-4 py-2 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={() => handleRaiseDispute(task.id)}
-                            disabled={loading}
-                            className="px-5 py-2 bg-rose-600 text-white text-xs font-bold rounded-xl shadow-lg"
-                          >
-                            Submit Dispute On-Chain
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {/* TAB 2: AGENT LEADERBOARD */}
-          {activeTab === 'leaderboard' && (
-            <div className="space-y-6">
-              {!reputationContractAddress ? (
-                <div className="p-12 bg-slate-900/80 backdrop-blur-xl border border-amber-500/40 rounded-3xl text-center space-y-4 shadow-2xl">
-                  <Trophy className="w-12 h-12 text-amber-400 mx-auto animate-bounce" />
-                  <h3 className="text-xl font-bold text-white">No AgentReputation Contract Address Set</h3>
-                  <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Please deploy <code className="text-amber-300 bg-amber-950 px-2 py-0.5 rounded font-mono">AgentReputation.py</code> on GenStudio and paste its address in the top bar.
-                  </p>
-                </div>
-              ) : leaderboard.length === 0 ? (
-                <div className="p-12 bg-slate-900/80 backdrop-blur-xl border border-amber-500/40 rounded-3xl text-center space-y-4 shadow-2xl">
-                  <Trophy className="w-12 h-12 text-slate-500 mx-auto" />
-                  <h3 className="text-xl font-bold text-white">No Agent Reputation Records On-Chain</h3>
-                  <p className="text-xs text-slate-400">
-                    Once tasks are adjudicated and finalized, Agent scores will automatically appear on-chain.
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
-                  <div className="p-6 bg-gradient-to-r from-emerald-950/80 via-slate-900 to-amber-950/80 border-b border-slate-800 flex justify-between items-center">
-                    <h3 className="text-base font-extrabold text-white flex items-center gap-2.5">
-                      <Trophy className="w-5 h-5 text-amber-400" /> On-Chain AI Agent Reputation Rankings
-                    </h3>
-                    <span className="text-xs font-mono text-emerald-300 font-bold">Live AgentReputation.py</span>
-                  </div>
-                  <div className="divide-y divide-slate-800 text-xs">
-                    {leaderboard.map((item, idx) => {
-                      const total = Number(item.total_tasks || 0);
-                      const succ = Number(item.successful_tasks || 0);
-                      const winRate = total > 0 ? Math.round((succ / total) * 100) : 100;
-
-                      return (
-                        <div key={item.agent} className="p-5 flex flex-wrap justify-between items-center gap-4 hover:bg-emerald-950/20 transition duration-200">
-                          <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-900 to-teal-900 border border-emerald-500/40 flex items-center justify-center font-bold font-mono text-emerald-300 text-sm shadow-md">
-                              #{idx + 1}
-                            </div>
-                            <div>
-                              <div className="font-mono font-bold text-white flex items-center gap-2 text-sm">
-                                <span>{item.agent}</span>
-                                {idx === 0 && <span className="px-2.5 py-0.5 bg-amber-950 border border-amber-500/60 text-amber-300 text-[10px] rounded-full font-bold shadow-[0_0_10px_rgba(245,158,11,0.3)]">Top Rated Agent</span>}
-                              </div>
-                              <div className="text-xs text-slate-400 mt-1 font-mono">
-                                Total Jobs: <code className="text-emerald-300">{item.total_tasks}</code> | Success: <code className="text-teal-400">{item.successful_tasks}</code> | Failed: <code className="text-rose-400">{item.failed_tasks}</code>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-8 font-mono text-right">
-                            <div>
-                              <span className="text-[10px] text-slate-400 block font-semibold">Success Rate</span>
-                              <span className="text-base font-black text-emerald-400">{winRate}%</span>
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-slate-400 block font-semibold">Reputation Score</span>
-                              <span className="text-2xl font-black bg-gradient-to-r from-amber-300 to-yellow-500 bg-clip-text text-transparent">{item.score} pts</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: CREATE ESCROW FORM */}
-          {activeTab === 'create' && (
-            <div className="max-w-3xl mx-auto p-8 bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl shadow-2xl space-y-6">
-              <div>
-                <h3 className="text-xl font-extrabold text-white flex items-center gap-2.5">
-                  <PlusCircle className="w-6 h-6 text-emerald-400" /> Create New AI Escrow Task
-                </h3>
-                <p className="text-xs text-slate-400 mt-1 font-medium">
-                  Deposit GEN tokens locked safely in an Intelligent Contract. Workers must lock a 15% collateral stake to claim.
-                </p>
-              </div>
-
-              <form onSubmit={handleCreateEscrow} className="space-y-5 text-xs font-mono">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1.5">Task Unique ID</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. task_001 (or auto-generated)"
-                      value={taskIdInput}
-                      onChange={(e) => setTaskIdInput(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-emerald-400 shadow-inner"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1.5">Escrow Reward Amount (GEN)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0.1"
-                      required
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-emerald-400 shadow-inner"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1.5 font-sans">Task Title</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. AI Security Code Audit for Smart Contract"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 font-sans focus:outline-none focus:border-emerald-400 font-semibold text-sm shadow-inner"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1.5 font-sans">Criteria Spec URL (Full HTTP/HTTPS requirement spec)</label>
-                  <input
-                    type="url"
-                    required
-                    placeholder="https://raw.githubusercontent.com/.../requirements.txt"
-                    value={criteriaUrl}
-                    onChange={(e) => setCriteriaUrl(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-emerald-400 shadow-inner"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1.5 font-sans">Criteria SHA-256 Hash (Steward Cryptographic Proof Pinning)</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-                    value={criteriaHash}
-                    onChange={(e) => setCriteriaHash(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-emerald-300 font-mono focus:outline-none focus:border-amber-400 shadow-inner"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1 font-sans">
-                    Ensures criteria spec immutability. Validator nodes verify SHA-256 hash before LLM evaluation.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1.5 font-sans">Deadline (Hours)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={deadlineHours}
-                    onChange={(e) => setDeadlineHours(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-emerald-400 shadow-inner"
-                  />
+              
+              {/* FILTER BAR */}
+              <div className="flex items-center justify-between flex-wrap gap-3 pb-2 border-b border-zinc-800/80">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs text-zinc-500 mr-1 flex items-center gap-1">
+                    <Filter className="w-3 h-3" /> Filter:
+                  </span>
+                  {[
+                    { id: 'ALL', label: 'All', count: tasks.length },
+                    { id: 'OPEN', label: 'Open', count: tasks.filter(t => t.status === 'OPEN').length },
+                    { id: 'IN_PROGRESS', label: 'In Progress', count: tasks.filter(t => t.status === 'IN_PROGRESS').length },
+                    { id: 'AWAITING_PAYOUT', label: 'Cooling Off', count: tasks.filter(t => t.status === 'AWAITING_PAYOUT').length },
+                    { id: 'DISPUTED', label: 'Disputed', count: tasks.filter(t => t.status === 'DISPUTED').length },
+                    { id: 'CLOSED', label: 'Closed', count: tasks.filter(t => t.status === 'CLOSED').length }
+                  ].map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => setStatusFilter(f.id)}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                        statusFilter === f.id
+                          ? 'bg-zinc-800 text-white shadow-sm border border-zinc-700'
+                          : 'text-zinc-400 hover:text-zinc-200 bg-zinc-900/40'
+                      }`}
+                    >
+                      <span>{f.label}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                        statusFilter === f.id ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-800 text-zinc-500'
+                      }`}>
+                        {f.count}
+                      </span>
+                    </button>
+                  ))}
                 </div>
 
                 <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-4 bg-gradient-to-r from-emerald-500 via-teal-600 to-amber-500 hover:from-emerald-400 hover:to-amber-400 text-slate-950 font-black text-sm rounded-xl shadow-[0_0_25px_rgba(16,185,129,0.4)] transition duration-300 flex items-center justify-center gap-2"
+                  onClick={() => fetchTasksFromContract()}
+                  disabled={fetchingOnChain}
+                  className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-medium rounded-lg flex items-center gap-1.5 transition"
                 >
-                  <Cpu className="w-5 h-5 animate-pulse text-slate-950" />
-                  <span>{loading ? 'Submitting Transaction to Studionet...' : 'Create Escrow & Deposit GEN'}</span>
+                  <RefreshCw className={`w-3 h-3 ${fetchingOnChain ? 'animate-spin text-emerald-400' : ''}`} />
+                  <span>Refresh On-Chain</span>
                 </button>
-              </form>
+              </div>
+
+              {/* TASKS LIST RENDERING */}
+              {fetchingOnChain && tasks.length === 0 ? (
+                <div className="py-20 text-center space-y-3">
+                  <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
+                  <p className="text-xs font-mono text-zinc-400">Đang đồng bộ dữ liệu on-chain từ GenLayer Studionet RPC...</p>
+                </div>
+              ) : filteredTasks.length === 0 ? (
+                <div className="py-16 text-center border border-zinc-800/80 rounded-2xl bg-zinc-900/40 p-8 space-y-4">
+                  <FileCheck className="w-10 h-10 text-zinc-600 mx-auto" />
+                  <h3 className="text-base font-semibold text-white">No Escrow Tasks Found</h3>
+                  <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+                    No on-chain tasks matching filter <span className="font-mono text-emerald-400 font-semibold">{statusFilter}</span>.
+                  </p>
+                  <button
+                    onClick={() => setActiveTab('create')}
+                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-semibold rounded-xl transition inline-flex items-center gap-2"
+                  >
+                    <PlusCircle className="w-4 h-4" /> Create First Escrow
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredTasks.map(task => {
+                    const isClient = account && account.toLowerCase() === task.client.toLowerCase();
+                    const isWorker = account && account.toLowerCase() === task.worker.toLowerCase();
+                    const bountyGen = (Number(BigInt(task.amount || 0)) / 1e18).toFixed(2);
+                    const stakeGen = (Number(BigInt(task.worker_stake || 0)) / 1e18).toFixed(2);
+                    const requiredStakeGen = (Number(BigInt(task.amount || 0)) * 0.15 / 1e18).toFixed(2);
+
+                    return (
+                      <div
+                        key={task.id}
+                        className="bg-zinc-900/70 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700/80 rounded-2xl p-6 transition-all shadow-sm space-y-5"
+                      >
+                        {/* CARD HEADER */}
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div className="space-y-1.5 flex-1 min-w-[280px]">
+                            <div className="flex items-center gap-2.5 flex-wrap">
+                              <span className="font-mono text-xs text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded-md">
+                                #{task.id}
+                              </span>
+                              {getStatusBadge(task.status)}
+                            </div>
+                            <h3 className="text-lg font-bold text-white tracking-tight">
+                              {task.title}
+                            </h3>
+                          </div>
+
+                          {/* REWARD BADGE */}
+                          <div className="text-right">
+                            <div className="text-2xl font-black font-mono text-amber-400">
+                              {bountyGen} <span className="text-sm font-normal text-zinc-400">GEN</span>
+                            </div>
+                            <div className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                              15% Collateral: <strong className="text-zinc-200">{stakeGen > '0.00' ? stakeGen : requiredStakeGen} GEN</strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* META INFO ROW */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-zinc-400 font-mono bg-zinc-950/60 p-3 rounded-xl border border-zinc-800/60">
+                          <div className="flex items-center gap-2">
+                            <span className="text-zinc-500">Client:</span>
+                            <span
+                              onClick={() => handleCopy(task.client, `c_${task.id}`)}
+                              className="text-zinc-300 font-semibold hover:text-white cursor-pointer flex items-center gap-1"
+                              title="Click to copy"
+                            >
+                              {task.client.slice(0, 6)}...{task.client.slice(-4)}
+                              {copiedAddress === `c_${task.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-zinc-500" />}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-zinc-500">Worker:</span>
+                            {task.worker && task.worker !== '0x0000000000000000000000000000000000000000' ? (
+                              <span
+                                onClick={() => handleCopy(task.worker, `w_${task.id}`)}
+                                className="text-zinc-300 font-semibold hover:text-white cursor-pointer flex items-center gap-1"
+                              >
+                                {task.worker.slice(0, 6)}...{task.worker.slice(-4)}
+                                {copiedAddress === `w_${task.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-zinc-500" />}
+                              </span>
+                            ) : (
+                              <span className="text-emerald-400/90 font-medium">Unclaimed (Open to all agents)</span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 sm:justify-end">
+                            <span className="text-zinc-500">Attempts:</span>
+                            <span className="text-zinc-300 font-bold">{task.attempts}/3</span>
+                          </div>
+                        </div>
+
+                        {/* SPECIFICATION & DELIVERABLE LINKS */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                          {/* SPEC */}
+                          <div className="p-3.5 bg-zinc-950/40 rounded-xl border border-zinc-800/60 space-y-1.5">
+                            <span className="text-zinc-400 font-medium flex items-center gap-1.5 text-[11px]">
+                              <FileText className="w-3.5 h-3.5 text-emerald-400" /> Requirement Specification
+                            </span>
+                            <div className="flex items-center justify-between gap-2">
+                              <a
+                                href={task.criteria_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold flex items-center gap-1.5 truncate group"
+                              >
+                                <span>View Spec Document</span>
+                                <ExternalLink className="w-3 h-3 shrink-0 group-hover:translate-x-0.5 transition" />
+                              </a>
+                              {task.criteria_hash && (
+                                <span className="text-[10px] font-mono text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800" title={`Full SHA-256: ${task.criteria_hash}`}>
+                                  sha256:{task.criteria_hash.slice(0, 8)}...
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* DELIVERABLE */}
+                          <div className="p-3.5 bg-zinc-950/40 rounded-xl border border-zinc-800/60 space-y-1.5">
+                            <span className="text-zinc-400 font-medium flex items-center gap-1.5 text-[11px]">
+                              <FileCheck className="w-3.5 h-3.5 text-amber-400" /> Deliverable Submission
+                            </span>
+                            <div>
+                              {task.deliverable_url ? (
+                                <a
+                                  href={task.deliverable_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-amber-400 hover:text-amber-300 text-xs font-semibold flex items-center gap-1.5 truncate group"
+                                >
+                                  <span>View Worker Deliverable</span>
+                                  <ExternalLink className="w-3 h-3 shrink-0 group-hover:translate-x-0.5 transition" />
+                                </a>
+                              ) : (
+                                <span className="text-zinc-500 italic text-xs">
+                                  Pending worker delivery...
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* AI JURY VERDICT CARD */}
+                        {task.verdict_reason && (
+                          <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2 text-xs">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Bot className="w-4 h-4 text-emerald-400" />
+                                <span className="font-semibold text-white font-mono">
+                                  AI Jury Verdict: <span className="text-emerald-400">{task.verdict || 'EVALUATED'}</span>
+                                </span>
+                              </div>
+                              {task.confidence && (
+                                <span className="px-2.5 py-0.5 bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono text-[11px] rounded-md">
+                                  Confidence: {task.confidence}%
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-zinc-300 font-sans leading-relaxed text-xs bg-zinc-900/60 p-3 rounded-lg border border-zinc-800/60">
+                              "{task.verdict_reason}"
+                            </p>
+                          </div>
+                        )}
+
+                        {/* ACTION FOOTER */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-zinc-800/60">
+                          <div className="text-xs text-zinc-400">
+                            {task.status === 'AWAITING_PAYOUT' && (
+                              <span className="text-amber-400 flex items-center gap-1.5 font-medium">
+                                <Clock className="w-3.5 h-3.5 animate-pulse" /> 24h Cooling-Off Window active
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            {/* CLAIM TASK (Worker 15% stake) */}
+                            {task.status === 'OPEN' && (
+                              !account ? (
+                                <button
+                                  onClick={connectWallet}
+                                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-semibold rounded-xl transition flex items-center gap-2"
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5" /> Connect Wallet to Claim (15% Stake)
+                                </button>
+                              ) : !isClient ? (
+                                <button
+                                  onClick={() => handleAcceptTask(task)}
+                                  disabled={loading}
+                                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-semibold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                                >
+                                  <DollarSign className="w-3.5 h-3.5" /> Claim Task (Stake 15%)
+                                </button>
+                              ) : (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs text-zinc-400 flex items-center gap-1.5 bg-zinc-950 px-3 py-1.5 rounded-lg border border-zinc-800">
+                                    <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                                    Ví của bạn là Client tạo task này (Không thể tự claim)
+                                  </span>
+                                  <button
+                                    onClick={switchWorkerAccount}
+                                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition flex items-center gap-1.5"
+                                  >
+                                    <RefreshCw className="w-3 h-3" /> Đổi sang Ví Worker để Claim
+                                  </button>
+                                </div>
+                              )
+                            )}
+
+                            {/* SUBMIT WORK */}
+                            {(task.status === 'IN_PROGRESS' || task.status === 'NEEDS_REVISION') && isWorker && (
+                              <button
+                                onClick={() => setSubmitTaskTargetId(task.id)}
+                                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black text-xs font-semibold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                              >
+                                <FileCheck className="w-3.5 h-3.5" /> Submit Deliverable & Trigger AI Jury
+                              </button>
+                            )}
+
+                            {/* RAISE DISPUTE */}
+                            {task.status === 'AWAITING_PAYOUT' && (isClient || isWorker) && (
+                              <button
+                                onClick={() => setDisputeTargetId(task.id)}
+                                className="px-3.5 py-2 bg-rose-950/80 hover:bg-rose-900 border border-rose-800/80 text-rose-200 text-xs font-semibold rounded-xl transition flex items-center gap-1.5"
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5 text-rose-400" /> Raise Dispute
+                              </button>
+                            )}
+
+                            {/* FINALIZE PAYOUT */}
+                            {task.status === 'AWAITING_PAYOUT' && (
+                              <button
+                                onClick={() => handleFinalizePayout(task.id)}
+                                disabled={loading}
+                                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-semibold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Finalize Payout (Disburse GEN)
+                              </button>
+                            )}
+
+                            {/* RECOVER STUCK FUNDS */}
+                            {(task.status === 'OPEN' || task.status === 'IN_PROGRESS' || task.status === 'NEEDS_REVISION') && isClient && (
+                              <button
+                                onClick={() => handleRecoverStuckFunds(task.id)}
+                                disabled={loading}
+                                className="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-xl transition"
+                              >
+                                Recover Funds
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* SUBMIT WORK MODAL */}
+                        {submitTaskTargetId === task.id && (
+                          <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-700 space-y-3">
+                            <h4 className="text-xs font-semibold text-white flex items-center gap-1.5">
+                              <FileCheck className="w-4 h-4 text-emerald-400" /> Submit Deliverable for Task #{task.id}
+                            </h4>
+                            <input
+                              type="url"
+                              placeholder="https://raw.githubusercontent.com/.../report.md"
+                              value={deliverableUrlInput}
+                              onChange={(e) => setDeliverableUrlInput(e.target.value)}
+                              className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-400"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => setSubmitTaskTargetId(null)}
+                                className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => handleSubmitWork(task.id)}
+                                disabled={loading}
+                                className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-semibold rounded-lg"
+                              >
+                                Submit & Evaluate
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* DISPUTE MODAL */}
+                        {disputeTargetId === task.id && (
+                          <div className="p-4 bg-zinc-950 rounded-xl border border-rose-800/80 space-y-3">
+                            <h4 className="text-xs font-semibold text-rose-300 flex items-center gap-1.5">
+                              <AlertTriangle className="w-4 h-4 text-rose-400" /> Raise Dispute for Task #{task.id}
+                            </h4>
+                            <input
+                              type="text"
+                              placeholder="Reason for dispute..."
+                              value={disputeReasonInput}
+                              onChange={(e) => setDisputeReasonInput(e.target.value)}
+                              className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-rose-400"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => setDisputeTargetId(null)}
+                                className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => handleRaiseDispute(task.id)}
+                                disabled={loading}
+                                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg"
+                              >
+                                Confirm Dispute
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: CREATE ESCROW (2-COLUMN MODERN DESIGN) */}
+          {activeTab === 'create' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              
+              {/* FORM (7 COLS) */}
+              <div className="lg:col-span-7 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-6 sm:p-8 space-y-6">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <PlusCircle className="w-5 h-5 text-emerald-400" /> Create New AI Escrow Task
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Deposit GEN into GenLayer Intelligent Contract. Workers lock 15% collateral stake to claim.
+                  </p>
+                </div>
+
+                {/* QUICK TEMPLATES */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-zinc-500">Quick template:</span>
+                  {[
+                    { label: 'Code Audit', title: 'Smart Contract Security Audit', amount: '2.5' },
+                    { label: 'API Integration', title: 'GenLayer Python SDK Integration', amount: '1.5' },
+                    { label: 'Doc Translation', title: 'Technical Whitepaper Translation', amount: '1.0' }
+                  ].map(tmpl => (
+                    <button
+                      key={tmpl.label}
+                      type="button"
+                      onClick={() => {
+                        setTitle(tmpl.title);
+                        setAmount(tmpl.amount);
+                        setCriteriaUrl('https://raw.githubusercontent.com/tuannguyen1995/agentEscrowCourt/master/README.md');
+                      }}
+                      className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg transition"
+                    >
+                      + {tmpl.label}
+                    </button>
+                  ))}
+                </div>
+
+                <form onSubmit={handleCreateEscrow} className="space-y-4 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-zinc-300 font-medium mb-1.5">Task ID (Optional)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. task_001 (auto if empty)"
+                        value={taskIdInput}
+                        onChange={(e) => setTaskIdInput(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 font-mono focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-zinc-300 font-medium mb-1.5">Escrow Bounty (GEN)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        required
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 font-mono focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-300 font-medium mb-1.5">Task Title</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. AI Vulnerability Audit for GenLayer Contract"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 font-semibold focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-300 font-medium mb-1.5">Specification URL (Raw HTTP/HTTPS spec)</label>
+                    <input
+                      type="url"
+                      required
+                      placeholder="https://raw.githubusercontent.com/.../spec.md"
+                      value={criteriaUrl}
+                      onChange={(e) => setCriteriaUrl(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-zinc-300 font-medium mb-1.5">Criteria SHA-256 Hash</label>
+                      <input
+                        type="text"
+                        required
+                        value={criteriaHash}
+                        onChange={(e) => setCriteriaHash(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-300 font-mono focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-zinc-300 font-medium mb-1.5">Deadline (Hours)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        value={deadlineHours}
+                        onChange={(e) => setDeadlineHours(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 font-mono focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-sm rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.25)] transition duration-200 flex items-center justify-center gap-2 mt-4"
+                  >
+                    <Cpu className="w-4 h-4" />
+                    <span>{loading ? 'Submitting to Studionet...' : `Create Escrow & Lock ${amount} GEN`}</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* LIVE PREVIEW (5 COLS) */}
+              <div className="lg:col-span-5 space-y-4">
+                <div className="text-xs font-semibold text-zinc-400 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Live On-Chain Card Preview
+                </div>
+
+                <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-6 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="font-mono text-xs text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded">
+                        #{taskIdInput || 'task_preview'}
+                      </span>
+                      <div className="mt-2">
+                        {getStatusBadge('OPEN')}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xl font-bold font-mono text-amber-400">
+                        {parseFloat(amount || '0').toFixed(2)} GEN
+                      </div>
+                      <div className="text-[11px] text-zinc-400 font-mono">
+                        15% Stake: {(parseFloat(amount || '0') * 0.15).toFixed(2)} GEN
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-base font-bold text-white">
+                      {title || 'Untitled Task Title'}
+                    </h4>
+                    <p className="text-xs text-zinc-400 mt-1 line-clamp-2">
+                      {criteriaUrl || 'Specification document URL will appear here once entered...'}
+                    </p>
+                  </div>
+
+                  <div className="pt-3 border-t border-zinc-800/80 flex justify-between items-center text-xs text-zinc-500">
+                    <span>Deadline: {deadlineHours}h</span>
+                    <span>AI Jury: Multi-Validator Consensus</span>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-zinc-950/60 rounded-xl border border-zinc-800/60 text-xs text-zinc-400 space-y-2">
+                  <span className="font-semibold text-zinc-300 block">Steward Guarantee:</span>
+                  <ul className="list-disc list-inside space-y-1 text-[11px] text-zinc-400">
+                    <li>GEN is safely escrowed in GenLayer Intelligent Contract.</li>
+                    <li>Worker must lock 15% collateral to claim.</li>
+                    <li>AI Jury evaluates deliverable with untruncated web render.</li>
+                    <li>24h Cooling-Off Window protects both parties before final payout.</li>
+                  </ul>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 3: AGENT LEADERBOARD */}
+          {activeTab === 'leaderboard' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-amber-400" /> On-Chain AI Agent Reputation Leaderboard
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Live scores queried across contracts from <code className="text-zinc-300 font-mono">AgentReputation.py</code> on GenLayer Studionet.
+                  </p>
+                </div>
+                <button
+                  onClick={() => fetchLeaderboardFromContract()}
+                  className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs rounded-xl flex items-center gap-1.5 transition"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Refresh Ranks
+                </button>
+              </div>
+
+              {leaderboard.length === 0 ? (
+                <div className="py-16 text-center border border-zinc-800/80 rounded-2xl bg-zinc-900/40 p-8 space-y-3">
+                  <Trophy className="w-10 h-10 text-zinc-600 mx-auto" />
+                  <h4 className="text-base font-semibold text-white">No Agent Records Yet</h4>
+                  <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+                    Once tasks are successfully finalized on-chain, reputation scores will be computed and ranked here.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl overflow-hidden divide-y divide-zinc-800/80">
+                  {leaderboard.map((item, idx) => {
+                    const total = Number(item.total_tasks || 0);
+                    const succ = Number(item.successful_tasks || 0);
+                    const winRate = total > 0 ? Math.round((succ / total) * 100) : 100;
+
+                    return (
+                      <div key={item.agent} className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 hover:bg-zinc-800/40 transition">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold font-mono text-xs ${
+                            idx === 0
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              : idx === 1
+                              ? 'bg-slate-300/20 text-slate-200 border border-slate-300/30'
+                              : idx === 2
+                              ? 'bg-amber-700/20 text-amber-600 border border-amber-700/30'
+                              : 'bg-zinc-800 text-zinc-400'
+                          }`}>
+                            #{idx + 1}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-semibold text-white text-xs sm:text-sm">
+                                {item.agent}
+                              </span>
+                              {idx === 0 && (
+                                <span className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] rounded-full font-medium">
+                                  Top Agent
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-zinc-400 font-mono mt-1">
+                              Jobs: <strong className="text-zinc-200">{item.total_tasks}</strong> • Success: <strong className="text-emerald-400">{item.successful_tasks}</strong> • Failed: <strong className="text-rose-400">{item.failed_tasks}</strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-6 font-mono text-right">
+                          <div>
+                            <span className="text-[10px] text-zinc-500 block">Win Rate</span>
+                            <span className="text-sm font-bold text-emerald-400">{winRate}%</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-zinc-500 block">Reputation</span>
+                            <span className="text-lg font-black text-amber-400">{item.score} pts</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
           {/* TAB 4: ARCHITECTURE SPEC */}
           {activeTab === 'architecture' && (
-            <div className="max-w-4xl mx-auto p-8 bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl shadow-2xl space-y-6">
-              <h3 className="text-xl font-black text-white flex items-center gap-2 text-emerald-400">
-                <Code2 className="w-6 h-6" /> GenLayer Steward Compliant Architecture
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-                <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
-                  <span className="text-emerald-300 font-bold block text-sm">1. 24h Payout Cooling-off</span>
-                  <p className="text-slate-400 leading-relaxed font-sans">
-                    After AI Jury reaches consensus, task status enters AWAITING_PAYOUT for 24h (`payout_ready_at`) enabling either party to raise a dispute before funds disburse.
+            <div className="max-w-4xl mx-auto space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Code2 className="w-5 h-5 text-emerald-400" /> GenLayer Steward Compliant Architecture
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1">
+                  100% compliant with the GenLayer Intelligent Contract Review & Steward Evaluation Guidelines.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="p-5 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl space-y-2">
+                  <span className="font-bold text-white text-sm flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-400" /> 1. 24h Payout Cooling-Off Window
+                  </span>
+                  <p className="text-zinc-400 leading-relaxed">
+                    Once the AI Court reaches consensus, the escrow enters <code className="text-zinc-200 bg-zinc-800 px-1 py-0.5 rounded font-mono">AWAITING_PAYOUT</code> for 24 hours. Either party can initiate a dispute before funds disburse.
                   </p>
                 </div>
 
-                <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
-                  <span className="text-amber-300 font-bold block text-sm">2. 15% Collateral Staking</span>
-                  <p className="text-slate-400 leading-relaxed font-sans">
-                    Workers must lock a 15% collateral stake when claiming an OPEN task to prevent spam claims and ensure skin-in-the-game commitment.
+                <div className="p-5 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl space-y-2">
+                  <span className="font-bold text-white text-sm flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-emerald-400" /> 2. 15% Worker Collateral Staking
+                  </span>
+                  <p className="text-zinc-400 leading-relaxed">
+                    Workers must lock a mandatory 15% deposit to claim an OPEN escrow task. This eliminates spam bot claims and guarantees commitment to the specification.
                   </p>
                 </div>
 
-                <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
-                  <span className="text-teal-300 font-bold block text-sm">3. Untruncated Web Renders</span>
-                  <p className="text-slate-400 leading-relaxed font-sans">
-                    Full web renders of spec and deliverable are ingested directly into the LLM prompt without character truncation (`[:1500]`).
+                <div className="p-5 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl space-y-2">
+                  <span className="font-bold text-white text-sm flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-blue-400" /> 3. Untruncated Web Renders
+                  </span>
+                  <p className="text-zinc-400 leading-relaxed">
+                    Specifications and deliverables are fetched via <code className="text-zinc-200 bg-zinc-800 px-1 py-0.5 rounded font-mono">gl.nondet.web.render</code> without artificial character limits, passing complete contexts to validator LLMs.
                   </p>
                 </div>
 
-                <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
-                  <span className="text-blue-300 font-bold block text-sm">4. Stuck-Fund Recovery</span>
-                  <p className="text-slate-400 leading-relaxed font-sans">
-                    Client can reclaim funds via `recover_stuck_funds` if the task is abandoned or misses deadline.
+                <div className="p-5 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl space-y-2">
+                  <span className="font-bold text-white text-sm flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-teal-400" /> 4. Stuck-Fund Emergency Recovery
+                  </span>
+                  <p className="text-zinc-400 leading-relaxed">
+                    Clients retain the right to recover deposited escrow funds via <code className="text-zinc-200 bg-zinc-800 px-1 py-0.5 rounded font-mono">recover_stuck_funds</code> if the task is abandoned or misses deadlines.
                   </p>
                 </div>
               </div>
             </div>
           )}
 
-        </section>
+        </main>
 
-        {/* FAQ */}
-        <section className="max-w-7xl mx-auto px-4 py-8 border-t border-slate-800">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
-            <HelpCircle className="w-5 h-5 text-emerald-400" /> Frequently Asked Questions
+        {/* FAQ SECTION */}
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 border-t border-zinc-800/80">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+            <HelpCircle className="w-4 h-4 text-emerald-400" /> Frequently Asked Questions
           </h3>
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {faqs.map((faq, index) => (
-              <div key={index} className="bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-2xl overflow-hidden shadow-md">
+              <div key={index} className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl overflow-hidden">
                 <button
                   onClick={() => setOpenFaq(openFaq === index ? null : index)}
-                  className="w-full p-4 text-left flex justify-between items-center text-xs font-bold text-slate-200 hover:text-emerald-300 transition font-mono"
+                  className="w-full p-3.5 text-left flex justify-between items-center text-xs font-semibold text-zinc-300 hover:text-white transition"
                 >
                   <span>{faq.q}</span>
-                  {openFaq === index ? <ChevronUp className="w-4 h-4 text-emerald-400" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                  {openFaq === index ? <ChevronUp className="w-3.5 h-3.5 text-emerald-400" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />}
                 </button>
                 {openFaq === index && (
-                  <div className="p-4 pt-0 text-xs text-slate-400 font-sans border-t border-slate-800 leading-relaxed">
+                  <div className="p-3.5 pt-0 text-xs text-zinc-400 leading-relaxed border-t border-zinc-800/50">
                     {faq.a}
                   </div>
                 )}
@@ -1683,20 +2044,22 @@ export default function App() {
             ))}
           </div>
         </section>
+
       </div>
 
       {/* FOOTER */}
-      <footer className="border-t border-slate-800 bg-slate-950 py-6 text-center text-xs text-slate-400 space-y-2 relative z-10">
-        <div className="flex justify-center items-center gap-2 font-mono">
-          <Scale className="w-4 h-4 text-emerald-400 animate-pulse" />
-          <span className="font-bold text-slate-200">AgentEscrowCourt</span>
+      <footer className="border-t border-zinc-800/80 bg-zinc-950 py-5 text-center text-xs text-zinc-500 space-y-1 relative z-10">
+        <div className="flex justify-center items-center gap-2">
+          <Scale className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="font-semibold text-zinc-300">AgentEscrowCourt</span>
           <span>•</span>
           <span>GenLayer Studionet (Chain ID 61999)</span>
         </div>
-        <p className="text-[11px] text-slate-400 font-sans">
+        <p className="text-[11px] text-zinc-500">
           Decentralized AI Escrow Court powered by GenLayer Intelligent Contracts & Multi-Source Web Rendering.
         </p>
       </footer>
+
     </div>
   );
 }
