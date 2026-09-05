@@ -50,6 +50,28 @@ declare global {
   }
 }
 
+// Helper to clean and format raw RPC / viem error messages
+const formatCleanError = (err: any): string => {
+  const msg = err?.message || String(err || '');
+  if (msg.includes('32029') || msg.includes('Rate limit') || msg.includes('Failed to fetch')) {
+    return 'GenLayer Studionet RPC is temporarily busy or rate-limited (max 30 req/min). Please wait a few seconds and try again.';
+  }
+  if (msg.includes('Client cannot accept their own task')) {
+    return 'Access Denied: The creator (Client) cannot claim their own escrow task. Please switch to a Worker agent wallet.';
+  }
+  if (msg.includes('User rejected') || msg.includes('4001') || msg.includes('từ chối')) {
+    return 'Transaction was canceled in wallet.';
+  }
+  if (msg.includes('Insufficient stake')) {
+    return 'Insufficient stake: Worker must stake at least 15% collateral to claim this task.';
+  }
+  if (msg.includes('Request body:')) {
+    const parts = msg.split('Request body:');
+    return `${parts[0].trim()} (Network error)`;
+  }
+  return msg.length > 200 ? `${msg.slice(0, 200)}...` : msg;
+};
+
 // Polyfill native BigInt serialization for JSON.stringify in web3 / genlayer-js
 try {
   (BigInt.prototype as any).toJSON = function () {
@@ -261,8 +283,11 @@ export default function App() {
     const dataArr = [functionName, methodParamsAsString];
     const encodedData = toRlp(dataArr.map((param) => toHex(param)));
 
-    // 1. If MetaMask extension is available: Prompt real on-chain transaction
-    if (typeof window.ethereum !== 'undefined') {
+    // Check if the current user explicitly switched to a local Worker Agent account
+    const isLocalWorker = account && localStorage.getItem(`genlayer_pk_${account.toLowerCase()}`);
+
+    // 1. If not a local worker account and MetaMask extension is available: Prompt MetaMask
+    if (!isLocalWorker && typeof window.ethereum !== 'undefined') {
       try {
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         const activeAddr = ((window.ethereum.selectedAddress || (accounts && accounts[0])) || account || '').toLowerCase();
@@ -339,7 +364,7 @@ export default function App() {
       }
     }
 
-    // 2. Fallback to native GenLayer client
+    // 2. Execute via native GenLayer client (for Worker Agent or direct execution)
     if (!txHash) {
       const genlayerAcc = getOrCreateGenLayerAccount();
       const client = createClient({
@@ -347,6 +372,7 @@ export default function App() {
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0]
       });
 
+      // Ensure worker account has enough GEN for gas and collateral stake
       try {
         await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
           method: 'POST',
@@ -360,14 +386,18 @@ export default function App() {
         });
       } catch (_) {}
 
-      setStepMessage('Broadcasting transaction to GenLayer Studionet RPC...');
-      txHash = await client.writeContract({
-        account: genlayerAcc,
-        address: contractAddress as any,
-        functionName: functionName,
-        args: args,
-        value: value
-      });
+      setStepMessage(`Broadcasting transaction (${functionName}) to GenLayer Studionet RPC...`);
+      try {
+        txHash = await client.writeContract({
+          account: genlayerAcc,
+          address: contractAddress as any,
+          functionName: functionName,
+          args: args,
+          value: value
+        });
+      } catch (writeErr: any) {
+        throw new Error(formatCleanError(writeErr));
+      }
     }
 
     // 3. Asynchronous consensus monitor (polls eth_getTransactionByHash up to 45 times)
@@ -621,12 +651,30 @@ export default function App() {
       if (typeof window.ethereum !== 'undefined') {
         try {
           const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-          if (accounts && accounts.length > 0) {
+          if (accounts && accounts.length > 0 && !saved) {
             const addr = accounts[0].toLowerCase();
             setAccount(addr);
             localStorage.setItem('connected_wallet_account', addr);
           }
         } catch (_) {}
+
+        // Listen to MetaMask account switches in real time
+        const handleAccountsChanged = (accounts: string[]) => {
+          if (accounts && accounts.length > 0) {
+            const newAddr = accounts[0].toLowerCase();
+            setAccount(newAddr);
+            localStorage.setItem('connected_wallet_account', newAddr);
+            fetchUserBalance(newAddr);
+          } else {
+            setAccount(null);
+            localStorage.removeItem('connected_wallet_account');
+          }
+        };
+
+        window.ethereum.on('accountsChanged', handleAccountsChanged);
+        return () => {
+          window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        };
       }
     };
     restoreConnectedWallet();
@@ -634,14 +682,19 @@ export default function App() {
 
   useEffect(() => {
     fetchTasksFromContract();
-    fetchLeaderboardFromContract();
-  }, [fetchTasksFromContract, fetchLeaderboardFromContract]);
+  }, [fetchTasksFromContract]);
 
-  // Auto background polling every 4 seconds to sync on-chain state seamlessly
+  useEffect(() => {
+    if (activeTab === 'leaderboard') {
+      fetchLeaderboardFromContract();
+    }
+  }, [activeTab, fetchLeaderboardFromContract]);
+
+  // Auto background polling every 15 seconds to stay well below the 30 req/min rate limit
   useEffect(() => {
     const timer = setInterval(() => {
       fetchTasksFromContract();
-    }, 4000);
+    }, 15000);
     return () => clearInterval(timer);
   }, [fetchTasksFromContract]);
 
@@ -770,8 +823,8 @@ export default function App() {
 
       await fetchTasksFromContract();
     } catch (err: any) {
-      console.error(err);
-      setTxError(err.message || 'Failed to accept task.');
+      console.error('Accept task error:', err);
+      setTxError(formatCleanError(err));
     } finally {
       setLoading(false);
       setStepMessage('');
