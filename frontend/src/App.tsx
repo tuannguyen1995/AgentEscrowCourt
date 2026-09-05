@@ -109,6 +109,8 @@ interface AgentReputationRecord {
   failed_tasks: string;
 }
 
+const APP_VERSION = '2026.09.05.v4';
+
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'escrows' | 'create' | 'leaderboard' | 'architecture'>('escrows');
@@ -597,14 +599,23 @@ export default function App() {
   }, [reputationContractAddress]);
 
   useEffect(() => {
-    // Clean up any old mock keys from localStorage
-    Object.keys(localStorage).forEach(key => {
-      if (key.startsWith('genlayer_pk_')) localStorage.removeItem(key);
-    });
+    // AUTO PURGE OLD CACHE: If version mismatch, completely wipe stale keys/addresses
+    const storedVersion = localStorage.getItem('app_version');
+    if (storedVersion !== APP_VERSION) {
+      localStorage.removeItem('connected_wallet_account');
+      localStorage.removeItem('pending_escrow_tasks');
+      localStorage.removeItem('cached_onchain_tasks');
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('genlayer_pk_')) localStorage.removeItem(key);
+      });
+      localStorage.setItem('app_version', APP_VERSION);
+    }
 
-    if (typeof window.ethereum !== 'undefined') {
-      window.ethereum.request({ method: 'eth_accounts' })
-        .then((accounts: string[]) => {
+    // REAL-TIME METAMASK WALLET SYNC (NO STALE CACHE)
+    const syncRealMetaMaskAccount = async () => {
+      if (typeof window.ethereum !== 'undefined') {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
           if (accounts && accounts.length > 0) {
             const realAddr = accounts[0].toLowerCase();
             setAccount(realAddr);
@@ -615,9 +626,13 @@ export default function App() {
             localStorage.removeItem('connected_wallet_account');
             setUserBalance('0.0000');
           }
-        })
-        .catch(() => {});
+        } catch (_) {}
+      }
+    };
 
+    syncRealMetaMaskAccount();
+
+    if (typeof window.ethereum !== 'undefined') {
       const handleAccountsChanged = (accounts: string[]) => {
         if (accounts && accounts.length > 0) {
           const newAddr = accounts[0].toLowerCase();
@@ -631,13 +646,20 @@ export default function App() {
         }
       };
 
+      const handleChainChanged = () => {
+        syncRealMetaMaskAccount();
+        fetchTasksFromContract();
+      };
+
       window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('chainChanged', handleChainChanged);
+      window.addEventListener('focus', syncRealMetaMaskAccount);
+
       return () => {
         window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
+        window.removeEventListener('focus', syncRealMetaMaskAccount);
       };
-    } else {
-      const saved = localStorage.getItem('connected_wallet_account');
-      if (saved) setAccount(saved);
     }
   }, []);
 
