@@ -133,14 +133,19 @@ export default function App() {
     localStorage.setItem('reputation_contract_addr', repAddr);
   };
 
-  const getOrCreateGenLayerAccount = useCallback(() => {
-    let pk = localStorage.getItem('genlayer_pk') as `0x${string}` | null;
+  const getOrCreateGenLayerAccount = useCallback((targetAddr?: string | null) => {
+    const activeAddress = targetAddr || account;
+    const keyStorageName = activeAddress 
+      ? `genlayer_pk_${activeAddress.toLowerCase()}` 
+      : 'genlayer_pk_default';
+
+    let pk = localStorage.getItem(keyStorageName) as `0x${string}` | null;
     if (!pk || !pk.startsWith('0x') || pk.length !== 66) {
       pk = generatePrivateKey();
-      localStorage.setItem('genlayer_pk', pk);
+      localStorage.setItem(keyStorageName, pk);
     }
     return createAccount(pk);
-  }, []);
+  }, [account]);
 
   // Generic on-chain contract write execution
   const executeContractWrite = async (
@@ -163,7 +168,7 @@ export default function App() {
       }
     }
 
-    const genlayerAcc = getOrCreateGenLayerAccount();
+    const genlayerAcc = getOrCreateGenLayerAccount(account);
     const client = createClient({
       chain: STUDIONET_CONFIG as any,
       endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0],
@@ -247,9 +252,10 @@ export default function App() {
   // Switch or Reset Worker Account for testing worker claims
   const switchWorkerAccount = () => {
     const newPk = generatePrivateKey();
-    localStorage.setItem('genlayer_pk', newPk);
     const newAcc = createAccount(newPk);
     const newAddr = newAcc.address.toLowerCase();
+    localStorage.setItem(`genlayer_pk_${newAddr}`, newPk);
+    localStorage.setItem('genlayer_pk_default', newPk);
     setAccount(newAddr);
     alert(`Đã tạo và đổi sang Ví Worker mới:\n${newAddr}\n\nBây giờ bạn có thể nhận task (Claim Task) và ký quỹ 15%!`);
   };
