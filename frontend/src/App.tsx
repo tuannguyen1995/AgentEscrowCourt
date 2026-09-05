@@ -139,7 +139,14 @@ export default function App() {
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
 
   const [userBalance, setUserBalance] = useState<string>('0.0000');
-  const [tasks, setTasks] = useState<EscrowTask[]>([]);
+  const [tasks, setTasks] = useState<EscrowTask[]>(() => {
+    try {
+      const cached = localStorage.getItem('cached_onchain_tasks');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   
   // Pending optimistic tasks (shown immediately when created while consensus runs)
   const [pendingTasks, setPendingTasks] = useState<EscrowTask[]>(() => {
@@ -208,8 +215,24 @@ export default function App() {
 
   const fetchUserBalance = useCallback(async (targetAddr?: string | null) => {
     const active = targetAddr || account;
-    if (!active) return;
+    if (!active) {
+      setUserBalance('0.0000');
+      return;
+    }
     try {
+      // 1. Query directly from MetaMask provider (bypasses Studionet HTTP rate limits!)
+      if (typeof window.ethereum !== 'undefined') {
+        const balHex = await window.ethereum.request({
+          method: 'eth_getBalance',
+          params: [active, 'latest']
+        });
+        if (balHex) {
+          const balWei = BigInt(balHex);
+          setUserBalance((Number(balWei) / 1e18).toFixed(4));
+          return;
+        }
+      }
+      // 2. Fallback HTTP
       const res = await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -225,7 +248,9 @@ export default function App() {
         const balWei = BigInt(json.result);
         setUserBalance((Number(balWei) / 1e18).toFixed(4));
       }
-    } catch (_) {}
+    } catch (e) {
+      console.warn('Balance query fallback failed:', e);
+    }
   }, [account]);
 
   const handleFaucet = async () => {
@@ -523,9 +548,17 @@ export default function App() {
         return remaining;
       });
 
-      setTasks(onChainTasks);
+      if (onChainTasks && onChainTasks.length > 0) {
+        setTasks(onChainTasks);
+        localStorage.setItem('cached_onchain_tasks', JSON.stringify(onChainTasks));
+      }
     } catch (err: any) {
-      console.error('Failed to read tasks on-chain:', err);
+      console.warn('On-chain tasks read delayed or rate-limited:', err);
+      // Retain cached tasks from localStorage so the UI is never blank
+      const cached = localStorage.getItem('cached_onchain_tasks');
+      if (cached) {
+        try { setTasks(JSON.parse(cached)); } catch (_) {}
+      }
     } finally {
       setFetchingOnChain(false);
     }
@@ -564,45 +597,48 @@ export default function App() {
   }, [reputationContractAddress]);
 
   useEffect(() => {
-    const restoreConnectedWallet = async () => {
-      const saved = localStorage.getItem('connected_wallet_account');
-      if (saved) {
-        setAccount(saved);
-      }
-      if (typeof window.ethereum !== 'undefined') {
-        try {
-          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-          if (accounts && accounts.length > 0 && !saved) {
-            const addr = accounts[0].toLowerCase();
-            setAccount(addr);
-            localStorage.setItem('connected_wallet_account', addr);
-          }
-        } catch (_) {}
-
-        // Listen to MetaMask account switches in real time
-        const handleAccountsChanged = (accounts: string[]) => {
-          if (accounts && accounts.length > 0) {
-            const newAddr = accounts[0].toLowerCase();
-            setAccount(newAddr);
-            localStorage.setItem('connected_wallet_account', newAddr);
-            fetchUserBalance(newAddr);
-          } else {
-            setAccount(null);
-            localStorage.removeItem('connected_wallet_account');
-          }
-        };
-
-        window.ethereum.on('accountsChanged', handleAccountsChanged);
-        return () => {
-          window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-        };
-      }
-    };
     // Clean up any old mock keys from localStorage
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('genlayer_pk_')) localStorage.removeItem(key);
     });
-    restoreConnectedWallet();
+
+    if (typeof window.ethereum !== 'undefined') {
+      window.ethereum.request({ method: 'eth_accounts' })
+        .then((accounts: string[]) => {
+          if (accounts && accounts.length > 0) {
+            const realAddr = accounts[0].toLowerCase();
+            setAccount(realAddr);
+            localStorage.setItem('connected_wallet_account', realAddr);
+            fetchUserBalance(realAddr);
+          } else {
+            setAccount(null);
+            localStorage.removeItem('connected_wallet_account');
+            setUserBalance('0.0000');
+          }
+        })
+        .catch(() => {});
+
+      const handleAccountsChanged = (accounts: string[]) => {
+        if (accounts && accounts.length > 0) {
+          const newAddr = accounts[0].toLowerCase();
+          setAccount(newAddr);
+          localStorage.setItem('connected_wallet_account', newAddr);
+          fetchUserBalance(newAddr);
+        } else {
+          setAccount(null);
+          localStorage.removeItem('connected_wallet_account');
+          setUserBalance('0.0000');
+        }
+      };
+
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      return () => {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      };
+    } else {
+      const saved = localStorage.getItem('connected_wallet_account');
+      if (saved) setAccount(saved);
+    }
   }, []);
 
   useEffect(() => {
@@ -615,13 +651,14 @@ export default function App() {
     }
   }, [activeTab, fetchLeaderboardFromContract]);
 
-  // Auto background polling every 15 seconds to stay well below the 30 req/min rate limit
+  // Background sync ONLY when there are active pending tasks to avoid exhausting the 500 req/hr quota
   useEffect(() => {
+    if (pendingTasks.length === 0) return;
     const timer = setInterval(() => {
       fetchTasksFromContract();
-    }, 15000);
+    }, 20000);
     return () => clearInterval(timer);
-  }, [fetchTasksFromContract]);
+  }, [pendingTasks.length, fetchTasksFromContract]);
 
   // CREATE ESCROW (Optimistic Insertion + Real On-chain Consensus)
   const handleCreateEscrow = async (e: React.FormEvent) => {
@@ -638,77 +675,69 @@ export default function App() {
     const tid = taskIdInput.trim() || `task_${Date.now()}`;
     const weiAmount = BigInt(Math.floor(parseFloat(amount) * 1e18));
 
-    // 1. OPTIMISTIC INSERTION: Show task immediately in Escrows tab!
-    const optimisticTask: EscrowTask = {
-      id: tid,
-      client: account.toLowerCase(),
-      worker: '0x0000000000000000000000000000000000000000',
-      title: title.trim(),
-      criteria_url: criteriaUrl.trim(),
-      criteria_hash: criteriaHash.trim() || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-      deliverable_url: '',
-      amount: weiAmount.toString(),
-      worker_stake: '0',
-      status: 'PENDING_CONSENSUS',
-      attempts: '0',
-      verdict: 'NONE',
-      verdict_reason: 'Transaction submitted! Awaiting 5 AI Validators consensus (~1-2 min)...',
-      confidence: '0',
-      payout_ready_at: '0',
-      deadline: (Math.floor(Date.now() / 1000) + parseInt(deadlineHours || '72', 10) * 3600).toString(),
-      created_at: Date.now()
-    };
-
-    setPendingTasks(prev => {
-      const updated = [optimisticTask, ...prev.filter(p => p.id !== tid)];
-      localStorage.setItem('pending_escrow_tasks', JSON.stringify(updated));
-      return updated;
-    });
-
-    // Switch to Escrows tab immediately so user sees their new task right away!
-    setActiveTab('escrows');
-    setStatusFilter('ALL');
     setLoading(true);
     setTxError(null);
-    setSuccessBanner(`🚀 Task #${tid} initiated! Awaiting 5 AI Validators consensus...`);
-
-    const createdTitle = title;
+    const createdTitle = title.trim();
     const createdAmount = amount;
-    setTaskIdInput('');
-    setTitle('');
-    setCriteriaUrl('');
+    const cUrl = criteriaUrl.trim();
+    const cHash = criteriaHash.trim() || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+    const dHours = parseInt(deadlineHours || '72', 10);
 
     try {
-      setStepMessage('Please confirm the GEN escrow transaction in your wallet...');
+      setStepMessage('Please confirm the escrow deposit in your MetaMask popup...');
 
-      await executeContractWrite(
+      // 1. Send transaction via MetaMask FIRST
+      const txHash = await executeContractWrite(
         escrowContractAddress,
         'create_escrow',
-        [
-          tid,
-          createdTitle,
-          criteriaUrl.trim() || optimisticTask.criteria_url,
-          criteriaHash.trim() || optimisticTask.criteria_hash,
-          parseInt(deadlineHours || '72', 10)
-        ],
+        [tid, createdTitle, cUrl, cHash, dHours],
         weiAmount
       );
 
-      setStepMessage('Consensus verified! Syncing escrows...');
+      // 2. Only upon successful MetaMask submission: add optimistic task and switch tabs!
+      const optimisticTask: EscrowTask = {
+        id: tid,
+        client: account.toLowerCase(),
+        worker: '0x0000000000000000000000000000000000000000',
+        title: createdTitle,
+        criteria_url: cUrl,
+        criteria_hash: cHash,
+        deliverable_url: '',
+        amount: weiAmount.toString(),
+        worker_stake: '0',
+        status: 'PENDING_CONSENSUS',
+        attempts: '0',
+        verdict: 'NONE',
+        verdict_reason: 'Transaction broadcasted! Awaiting 5 AI Validators consensus (~1-2 min)...',
+        confidence: '0',
+        payout_ready_at: '0',
+        deadline: (Math.floor(Date.now() / 1000) + dHours * 3600).toString(),
+        created_at: Date.now(),
+        tx_hash: txHash
+      };
+
+      setPendingTasks(prev => {
+        const updated = [optimisticTask, ...prev.filter(p => p.id !== tid)];
+        localStorage.setItem('pending_escrow_tasks', JSON.stringify(updated));
+        return updated;
+      });
+
+      // Clear form inputs
+      setTaskIdInput('');
+      setTitle('');
+      setCriteriaUrl('');
+
+      // Switch to Escrows tab to monitor validator consensus
+      setActiveTab('escrows');
+      setStatusFilter('ALL');
+      setSuccessBanner(`🎉 Task #${tid} (${createdAmount} GEN) submitted to Studionet! Consensus in progress...`);
+
+      // Refresh tasks
       await fetchTasksFromContract();
-      setSuccessBanner(`🎉 Task #${tid} (${createdAmount} GEN) successfully finalized with validator consensus!`);
     } catch (err: any) {
       console.error('Create escrow error:', err);
-      // If error occurs, remove from pending so it does not spin indefinitely
-      setPendingTasks(prev => {
-        const filtered = prev.filter(p => p.id !== tid);
-        localStorage.setItem('pending_escrow_tasks', JSON.stringify(filtered));
-        return filtered;
-      });
-      const errorMsg = err.message || 'Transaction failed or rejected.';
-      setTxError(errorMsg.includes('rejected') || errorMsg.includes('User rejected')
-        ? 'Transaction was rejected in wallet.'
-        : `Transaction error: ${errorMsg}`);
+      // Stay on the Create tab, do NOT wipe inputs, show real error message
+      setTxError(formatCleanError(err));
     } finally {
       setLoading(false);
       setStepMessage('');
