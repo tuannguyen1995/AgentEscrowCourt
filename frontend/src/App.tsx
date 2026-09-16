@@ -111,6 +111,7 @@ interface AgentReputationRecord {
 }
 
 const CURRENT_APP_VERSION = '2.0.0-chain-61997';
+const APP_VERSION = CURRENT_APP_VERSION;
 
 // Auto-purge stale cache from older versions / older chains (e.g., chain 61999)
 if (typeof window !== 'undefined') {
@@ -523,7 +524,7 @@ export default function App() {
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0]
       });
 
-      const rawResult = await client.request({
+      const rawResult = await (client as any).request({
         method: 'gen_call',
         params: [{
           type: 'read',
@@ -585,7 +586,7 @@ export default function App() {
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0]
       });
 
-      const rawResult = await client.request({
+      const rawResult = await (client as any).request({
         method: 'gen_call',
         params: [{
           type: 'read',
@@ -597,10 +598,11 @@ export default function App() {
       });
 
       const parsed = parseOnChainResult<AgentReputationRecord>(rawResult);
-      parsed.sort((a, b) => Number(b.score) - Number(a.score));
-      setLeaderboard(parsed);
+      if (parsed && parsed.length > 0) {
+        setLeaderboard(parsed);
+      }
     } catch (err: any) {
-      console.error('Failed to read reputation leaderboard on-chain:', err);
+      console.warn('Leaderboard read delayed or rate-limited:', err);
       setLeaderboard([]);
     }
   }, [reputationContractAddress]);
@@ -668,6 +670,7 @@ export default function App() {
         window.removeEventListener('focus', syncRealMetaMaskAccount);
       };
     }
+    return undefined;
   }, []);
 
   useEffect(() => {
@@ -1705,7 +1708,7 @@ export default function App() {
                                   <ShieldCheck className="w-3.5 h-3.5" /> Connect Wallet to Claim (15% Stake)
                                 </button>
                               ) : !isClient ? (
-                                task.status === 'CLAIMING_PENDING' || claimingTaskId === task.id ? (
+                                claimingTaskId === task.id ? (
                                   <div className="flex items-center gap-2 px-3.5 py-2 bg-indigo-950/50 border border-indigo-500/30 rounded-xl text-xs text-indigo-300 font-mono">
                                     <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
                                     <span>Staking 15% collateral... 5 Validators voting</span>
