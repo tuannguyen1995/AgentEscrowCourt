@@ -1038,6 +1038,15 @@ export default function App() {
   const handleFinalizePayout = async (taskId: string) => {
     if (!account) return;
 
+    const currentTask = allDisplayTasks.find(t => t.id === taskId);
+    if (currentTask && Number(currentTask.payout_ready_at || 0) * 1000 > Date.now()) {
+      const diffSec = Math.max(0, Math.floor((Number(currentTask.payout_ready_at) * 1000 - Date.now()) / 1000));
+      const h = Math.floor(diffSec / 3600);
+      const m = Math.floor((diffSec % 3600) / 60);
+      alert(`🔒 Smart Contract Timelock Enforced:\n\nThe 24-hour steward cooling-off window is active on-chain.\n\nPayout will unlock in ${h}h ${m}m to protect against unresolved disputes. Smart contract protocol security prohibits early disbursement.`);
+      return;
+    }
+
     setLoading(true);
     setTxError(null);
     setStepMessage(`Releasing escrow funds and settling Task #${taskId}...`);
@@ -1105,7 +1114,7 @@ export default function App() {
     return task.status === statusFilter;
   });
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, payoutReadyAt?: string) => {
     switch (status) {
       case 'CLAIMING_PENDING':
         return (
@@ -1135,13 +1144,20 @@ export default function App() {
             In Progress
           </span>
         );
-      case 'AWAITING_PAYOUT':
+      case 'AWAITING_PAYOUT': {
+        const readyMs = Number(payoutReadyAt || 0) * 1000;
+        const isLocked = readyMs > Date.now();
+        const diffSec = Math.max(0, Math.floor((readyMs - Date.now()) / 1000));
+        const h = Math.floor(diffSec / 3600);
+        const m = Math.floor((diffSec % 3600) / 60);
+
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-xs font-medium">
             <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-            24h Cooling Off
+            {isLocked ? `24h Cooling Off (${h}h ${m}m left)` : 'Cooling Off Completed'}
           </span>
         );
+      }
       case 'NEEDS_REVISION':
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full text-xs font-medium">
@@ -1713,7 +1729,7 @@ export default function App() {
                               <span className="font-mono text-xs text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded-md">
                                 #{task.id}
                               </span>
-                              {getStatusBadge(task.status)}
+                              {getStatusBadge(task.status, task.payout_ready_at)}
                               {account && isClient && (
                                 <span className="px-2.5 py-0.5 bg-purple-500/15 text-purple-300 border border-purple-500/30 rounded-full font-semibold text-[11px] flex items-center gap-1">
                                   👑 Your Escrow (Creator)
@@ -1863,11 +1879,24 @@ export default function App() {
                                 <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" /> Auto-promotes to OPEN upon consensus finalization...
                               </span>
                             )}
-                            {task.status === 'AWAITING_PAYOUT' && (
-                              <span className="text-amber-400 flex items-center gap-1.5 font-medium">
-                                <Clock className="w-3.5 h-3.5 animate-pulse" /> 24h Cooling-Off Window active
-                              </span>
-                            )}
+                            {task.status === 'AWAITING_PAYOUT' && (() => {
+                              const readyMs = Number(task.payout_ready_at || 0) * 1000;
+                              const isLocked = readyMs > Date.now();
+                              const diffSec = Math.max(0, Math.floor((readyMs - Date.now()) / 1000));
+                              const h = Math.floor(diffSec / 3600);
+                              const m = Math.floor((diffSec % 3600) / 60);
+
+                              return (
+                                <span className="text-amber-400 flex items-center gap-1.5 font-medium text-xs">
+                                  <Clock className="w-3.5 h-3.5 animate-pulse text-amber-400" />
+                                  {isLocked ? (
+                                    <span>24h Cooling-Off Active: <strong>{h}h {m}m left</strong> before payout unlocks</span>
+                                  ) : (
+                                    <span className="text-emerald-400 font-medium">24h Cooling-Off Complete — Ready for Payout</span>
+                                  )}
+                                </span>
+                              );
+                            })()}
                             {(task.status === 'IN_PROGRESS' || task.status === 'NEEDS_REVISION') && isClient && (
                               <span className="text-zinc-400 flex items-center gap-1.5 text-xs">
                                 ⏳ Assigned to Worker ({task.worker.slice(0, 6)}...{task.worker.slice(-4)}). Waiting for deliverable submission.
@@ -1936,15 +1965,32 @@ export default function App() {
                             )}
 
                             {/* FINALIZE PAYOUT (Only Client or Worker) */}
-                            {task.status === 'AWAITING_PAYOUT' && (isClient || isWorker) && (
-                              <button
-                                onClick={() => handleFinalizePayout(task.id)}
-                                disabled={loading}
-                                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-semibold rounded-xl transition flex items-center gap-1.5 shadow-sm"
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Finalize Payout (Disburse GEN)
-                              </button>
-                            )}
+                            {task.status === 'AWAITING_PAYOUT' && (isClient || isWorker) && (() => {
+                              const readyMs = Number(task.payout_ready_at || 0) * 1000;
+                              const isLocked = readyMs > Date.now();
+                              const diffSec = Math.max(0, Math.floor((readyMs - Date.now()) / 1000));
+                              const h = Math.floor(diffSec / 3600);
+                              const m = Math.floor((diffSec % 3600) / 60);
+
+                              return isLocked ? (
+                                <button
+                                  onClick={() => handleFinalizePayout(task.id)}
+                                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-400 border border-zinc-700/80 text-xs font-semibold rounded-xl transition flex items-center gap-1.5"
+                                  title={`Smart Contract Timelock Enforced: Payout unlocks in ${h}h ${m}m.`}
+                                >
+                                  <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                                  <span>Timelocked ({h}h {m}m left)</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleFinalizePayout(task.id)}
+                                  disabled={loading}
+                                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-semibold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Finalize Payout (Disburse GEN)
+                                </button>
+                              );
+                            })()}
 
                             {/* OBSERVER VIEW FOR AWAITING_PAYOUT */}
                             {task.status === 'AWAITING_PAYOUT' && !isClient && !isWorker && (
