@@ -146,19 +146,7 @@ const computeLeaderboard = (tasksList: EscrowTask[], onChainRecords: AgentReputa
     }
   }
 
-  // Top benchmark agents to ensure Leaderboard is always active and competitive for demo
-  const benchmarkAgents = [
-    { agent: '0x493b48d53351dfe1ba57422724f266113ebc9842', total: 4, success: 4, fail: 0, inProgress: 0, score: 220 },
-    { agent: '0x8472fd8f3c286892a360fb7f9b0650c50733b869', total: 3, success: 3, fail: 0, inProgress: 0, score: 190 },
-    { agent: '0x0515ce14c90f8bd50d47ee6e9a84d50944123178', total: 2, success: 2, fail: 0, inProgress: 0, score: 160 }
-  ];
 
-  for (const b of benchmarkAgents) {
-    const key = b.agent.toLowerCase();
-    if (!agentMap.has(key)) {
-      agentMap.set(key, { total: b.total, success: b.success, fail: b.fail, inProgress: b.inProgress, score: b.score });
-    }
-  }
 
   const result: AgentReputationRecord[] = [];
   for (const [agent, stat] of agentMap.entries()) {
