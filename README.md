@@ -2,10 +2,8 @@
 
 > **GenLayer Builder Program & Agent Tank Pitch Project**  
 > **GitHub Repository:** [github.com/tuannguyen1995/AgentEscrowCourt](https://github.com/tuannguyen1995/AgentEscrowCourt)  
-> **Live App URL:** [agent-escrow-court.vercel.app](https://agent-escrow-court.vercel.app)  
-> **Target Network:** `GenLayer Studio Next` (Chain ID `61997`, `https://studio-next.genlayer.com`)  
-> **AgentEscrowCourt Contract:** `0x83C6fD61e60E13848aCe1499F1ea9bB745a8adB4`  
-> **AgentReputation Contract:** `0xA3D92892EFF3523F1e94dA4AB18749416FaEd38C`  
+> **Live App URL:** [agent-escrow-court-genlayer.vercel.app](https://agent-escrow-court-genlayer.vercel.app)  
+> **Target Network:** GenLayer Studio Next (Chain ID `61997`) — RPC: `https://studio-next.genlayer.com/api`  
 > **Submission Track:** Builders Track (`portal.genlayer.foundation`)
 
 ---
@@ -59,19 +57,19 @@
 
 ---
 
-## 🚀 3. Step-by-Step Deployment Guide to `studionet`
+## 🚀 3. Step-by-Step Deployment Guide to GenLayer Studio Next (Chain ID 61997)
 
-### Step 1: Open GenLayer Studio
-1. Navigate to `https://studio.genlayer.com/contracts`.
-2. Go to **Settings -> Reset Storage -> Confirm**, then perform a hard refresh (Ctrl+Shift+R / Cmd+Shift+R) to clear storage.
+### Step 1: Open GenLayer Studio Next
+1. Navigate to `https://studio-next.genlayer.com/contracts`.
+2. Go to **Settings -> Reset Storage -> Confirm**, then perform a hard refresh (Ctrl+Shift+R / Cmd+Shift+R) to clear local state.
 
 ### Step 2: Deploy Contracts
-1. Create `AgentReputation.py` in Studio, paste code from [contracts/AgentReputation.py](file:///c:/Users/Admin/Documents/genlayer/agent-tank/contracts/AgentReputation.py). Click **Deploy**.
-2. Create `AgentEscrowCourt.py` in Studio, paste code from [contracts/AgentEscrowCourt.py](file:///c:/Users/Admin/Documents/genlayer/agent-tank/contracts/AgentEscrowCourt.py). Click **Deploy**.
+1. Create `AgentReputation.py` in Studio Next, paste code from [contracts/AgentReputation.py](file:///c:/Users/Admin/Documents/genlayer/agent-tank/contracts/AgentReputation.py). Click **Deploy**.
+2. Create `AgentEscrowCourt.py` in Studio Next, paste code from [contracts/AgentEscrowCourt.py](file:///c:/Users/Admin/Documents/genlayer/agent-tank/contracts/AgentEscrowCourt.py). Click **Deploy**.
 3. Verify transaction in Studio sidebar: Ensure `Result: SUCCESS` (not just `Status: FINALIZED`).
 
 ### Step 3: Link Contracts
-1. On Studio, execute `set_reputation_contract` on `AgentEscrowCourt` passing `AgentReputation` address.
+1. On Studio Next, execute `set_reputation_contract` on `AgentEscrowCourt` passing `AgentReputation` address.
 2. Execute `set_authorized_court` on `AgentReputation` passing `AgentEscrowCourt` address.
 
 ---

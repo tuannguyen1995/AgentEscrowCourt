@@ -4,24 +4,18 @@ Verifies active status of deployed AgentEscrowCourt and AgentReputation contract
 Usage:
     python scripts/verify_onchain.py
 """
-import copy
 from genlayer_py import create_client, create_account, generate_private_key, studionet
 
-studio_next = copy.deepcopy(studionet)
-studio_next.id = 61997
-studio_next.name = 'GenLayer Studio Next'
-studio_next.rpc_urls = {'default': {'http': ['https://studio-next.genlayer.com/api']}}
-
-ESCROW_CONTRACT = '0x83C6fD61e60E13848aCe1499F1ea9bB745a8adB4'
-REPUTATION_CONTRACT = '0xA3D92892EFF3523F1e94dA4AB18749416FaEd38C'
+ESCROW_CONTRACT = '0xFAD28fb892F51c2491DD991D50E909dAda8Ec5aD'
+REPUTATION_CONTRACT = '0xc1557D0ed400e88dAFC7d8A6263FADC9B29D3577'
 
 def main():
     print("=========================================================")
-    print("  GenLayer Studio Next On-Chain Contract Verification   ")
+    print("      GenLayer On-Chain Contract Verification           ")
     print("=========================================================\n")
 
     account = create_account(generate_private_key())
-    client = create_client(chain=studio_next, account=account)
+    client = create_client(chain=studionet, account=account)
 
     print(f"1. Checking AgentEscrowCourt ({ESCROW_CONTRACT})...")
     try:

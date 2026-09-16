@@ -110,26 +110,11 @@ interface AgentReputationRecord {
   failed_tasks: string;
 }
 
-const CURRENT_APP_VERSION = '2.0.0-chain-61997';
-const APP_VERSION = CURRENT_APP_VERSION;
-
-// Auto-purge stale cache from older versions / older chains (e.g., chain 61999)
-if (typeof window !== 'undefined') {
-  try {
-    const savedVersion = localStorage.getItem('app_version');
-    if (savedVersion !== CURRENT_APP_VERSION) {
-      console.log(`[AgentEscrowCourt] App version upgraded to ${CURRENT_APP_VERSION}. Purging stale chain 61999 cache...`);
-      localStorage.removeItem('cached_onchain_tasks');
-      localStorage.removeItem('pending_escrow_tasks');
-      localStorage.removeItem('escrow_contract_addr');
-      localStorage.removeItem('reputation_contract_addr');
-      localStorage.setItem('app_version', CURRENT_APP_VERSION);
-    }
-  } catch (_) {}
-}
+const APP_VERSION = '1.0.0';
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
+  const [currentChainId, setCurrentChainId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'escrows' | 'create' | 'leaderboard' | 'architecture' | 'about'>('escrows');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
@@ -228,13 +213,9 @@ export default function App() {
     setReputationContractAddress(DEFAULT_REPUTATION_CONTRACT_ADDRESS);
     localStorage.setItem('escrow_contract_addr', DEFAULT_ESCROW_CONTRACT_ADDRESS);
     localStorage.setItem('reputation_contract_addr', DEFAULT_REPUTATION_CONTRACT_ADDRESS);
-    localStorage.removeItem('cached_onchain_tasks');
-    localStorage.removeItem('pending_escrow_tasks');
-    setTasks([]);
-    setPendingTasks([]);
     fetchTasksFromContract();
     fetchLeaderboardFromContract();
-    alert('Reset to official contracts on GenLayer Studio Next (Chain ID 61997):\n• Escrow: ' + DEFAULT_ESCROW_CONTRACT_ADDRESS + '\n• Reputation: ' + DEFAULT_REPUTATION_CONTRACT_ADDRESS + '\n\nAll old cache has been purged!');
+    alert('Reset to official contracts on GenLayer Studionet:\n• Escrow: ' + DEFAULT_ESCROW_CONTRACT_ADDRESS + '\n• Reputation: ' + DEFAULT_REPUTATION_CONTRACT_ADDRESS);
   };
 
   const fetchUserBalance = useCallback(async (targetAddr?: string | null) => {
@@ -276,6 +257,35 @@ export default function App() {
       console.warn('Balance query fallback failed:', e);
     }
   }, [account]);
+
+  const handleFaucet = async () => {
+    if (!account) {
+      alert('Please connect your wallet before requesting testnet GEN.');
+      return;
+    }
+    setLoading(true);
+    setTxError(null);
+    setStepMessage('Dispensing 50 testnet GEN to your wallet on GenLayer Studionet...');
+    try {
+      await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'sim_fundAccount',
+          params: [account.toLowerCase(), 50000000000000000000] // 50 GEN
+        })
+      });
+      await fetchUserBalance(account);
+      setSuccessBanner(`🎉 Successfully received 50 testnet GEN for ${account.slice(0, 6)}...${account.slice(-4)}!`);
+    } catch (err: any) {
+      setTxError(err.message || 'Failed to claim testnet GEN faucet.');
+    } finally {
+      setLoading(false);
+      setStepMessage('');
+    }
+  };
 
 
 
@@ -409,6 +419,35 @@ export default function App() {
     return txHash;
   };
 
+  // Switch to GenLayer Studio Next (Chain 61997)
+  const switchToStudioNext = async () => {
+    if (typeof window.ethereum === 'undefined') return;
+    const CHAIN_ID_HEX = '0x' + STUDIONET_CONFIG.id.toString(16);
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: CHAIN_ID_HEX }],
+      });
+      setCurrentChainId(STUDIONET_CONFIG.id);
+    } catch (switchError: any) {
+      if (switchError.code === 4902 || switchError.code === -32603) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: CHAIN_ID_HEX,
+              chainName: STUDIONET_CONFIG.name,
+              nativeCurrency: STUDIONET_CONFIG.nativeCurrency,
+              rpcUrls: STUDIONET_CONFIG.rpcUrls.default.http,
+              blockExplorerUrls: STUDIONET_CONFIG.blockExplorerUrls,
+            }],
+          });
+          setCurrentChainId(STUDIONET_CONFIG.id);
+        } catch (_) {}
+      }
+    }
+  };
+
   // Connect wallet directly via MetaMask
   const connectWallet = async () => {
     if (typeof window.ethereum === 'undefined') {
@@ -425,27 +464,7 @@ export default function App() {
         setAccount(userAddr);
         localStorage.setItem('connected_wallet_account', userAddr);
 
-        const CHAIN_ID_HEX = '0x' + STUDIONET_CONFIG.id.toString(16);
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: CHAIN_ID_HEX }],
-          });
-        } catch (switchError: any) {
-          if (switchError.code === 4902 || switchError.code === -32603) {
-            await window.ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: CHAIN_ID_HEX,
-                chainName: STUDIONET_CONFIG.name,
-                nativeCurrency: STUDIONET_CONFIG.nativeCurrency,
-                rpcUrls: STUDIONET_CONFIG.rpcUrls.default.http,
-                blockExplorerUrls: STUDIONET_CONFIG.blockExplorerUrls,
-              }],
-            });
-          }
-        }
-
+        await switchToStudioNext();
         fetchUserBalance(userAddr);
       }
     } catch (err: any) {
@@ -524,7 +543,7 @@ export default function App() {
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0]
       });
 
-      const rawResult = await (client as any).request({
+      const rawResult = await client.request({
         method: 'gen_call',
         params: [{
           type: 'read',
@@ -586,7 +605,7 @@ export default function App() {
         endpoint: STUDIONET_CONFIG.rpcUrls.default.http[0]
       });
 
-      const rawResult = await (client as any).request({
+      const rawResult = await client.request({
         method: 'gen_call',
         params: [{
           type: 'read',
@@ -598,11 +617,10 @@ export default function App() {
       });
 
       const parsed = parseOnChainResult<AgentReputationRecord>(rawResult);
-      if (parsed && parsed.length > 0) {
-        setLeaderboard(parsed);
-      }
+      parsed.sort((a, b) => Number(b.score) - Number(a.score));
+      setLeaderboard(parsed);
     } catch (err: any) {
-      console.warn('Leaderboard read delayed or rate-limited:', err);
+      console.error('Failed to read reputation leaderboard on-chain:', err);
       setLeaderboard([]);
     }
   }, [reputationContractAddress]);
@@ -620,10 +638,14 @@ export default function App() {
       localStorage.setItem('app_version', APP_VERSION);
     }
 
-    // REAL-TIME METAMASK WALLET SYNC (NO STALE CACHE)
+    // REAL-TIME METAMASK WALLET & NETWORK SYNC (NO STALE CACHE)
     const syncRealMetaMaskAccount = async () => {
       if (typeof window.ethereum !== 'undefined') {
         try {
+          const chainHex = await window.ethereum.request({ method: 'eth_chainId' });
+          if (chainHex) {
+            setCurrentChainId(parseInt(chainHex, 16));
+          }
           const accounts = await window.ethereum.request({ method: 'eth_accounts' });
           if (accounts && accounts.length > 0) {
             const realAddr = accounts[0].toLowerCase();
@@ -655,7 +677,10 @@ export default function App() {
         }
       };
 
-      const handleChainChanged = () => {
+      const handleChainChanged = (newChainIdHex: string) => {
+        if (newChainIdHex) {
+          setCurrentChainId(parseInt(newChainIdHex, 16));
+        }
         syncRealMetaMaskAccount();
         fetchTasksFromContract();
       };
@@ -670,7 +695,6 @@ export default function App() {
         window.removeEventListener('focus', syncRealMetaMaskAccount);
       };
     }
-    return undefined;
   }, []);
 
   useEffect(() => {
@@ -762,7 +786,7 @@ export default function App() {
       // Switch to Escrows tab immediately so user sees their new task right away!
       setActiveTab('escrows');
       setStatusFilter('ALL');
-      setSuccessBanner(`🎉 Task #${tid} (${createdAmount} GEN) broadcasted to GenLayer Studio Next! 5 Validators are voting...`);
+      setSuccessBanner(`🎉 Task #${tid} (${createdAmount} GEN) broadcasted to Studionet! 5 Validators are voting...`);
       setLoading(false);
       setStepMessage(`Tx broadcasted (${txHash.slice(0, 10)}...)! 5 Validators voting on consensus...`);
 
@@ -1103,7 +1127,7 @@ export default function App() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
             
             {/* BRAND */}
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
                 <Scale className="w-5 h-5" />
               </div>
@@ -1187,36 +1211,49 @@ export default function App() {
             </nav>
 
             {/* WALLET & ACTION BUTTONS */}
-            <div className="flex items-center gap-2.5 shrink-0">
+            <div className="flex items-center gap-2.5">
               {account ? (
                 <>
                   {/* Real Balance Chip */}
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900/90 border border-zinc-800 rounded-xl text-xs font-mono">
+                  <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-mono">
                     <Coins className="w-3.5 h-3.5 text-amber-400" />
                     <span className="font-semibold text-white">{userBalance}</span>
-                    <span className="text-zinc-400 text-[11px]">GEN</span>
+                    <span className="text-zinc-400">GEN</span>
                   </div>
+
+                  {/* Faucet +50 GEN */}
+                  <button
+                    onClick={handleFaucet}
+                    disabled={loading}
+                    title="Claim 50 testnet GEN faucet"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-medium transition"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                    <span className="hidden sm:inline">Faucet</span> +50
+                  </button>
 
                   {/* Connected Wallet Pill */}
                   <div
                     onClick={() => handleCopy(account, 'account')}
                     title="Click to copy wallet address"
-                    className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-mono text-zinc-300 hover:text-white cursor-pointer transition"
+                    className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800/80 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-mono text-zinc-300 cursor-pointer transition"
                   >
-                    <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
                     <span>{account.slice(0, 6)}...{account.slice(-4)}</span>
                     {copiedAddress === 'account' ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <Check className="w-3 h-3 text-emerald-400" />
                     ) : (
-                      <Copy className="w-3.5 h-3.5 text-zinc-500" />
+                      <Copy className="w-3 h-3 text-zinc-500" />
                     )}
                   </div>
+
+
 
                   {/* Disconnect */}
                   <button
                     onClick={disconnectWallet}
                     title="Disconnect wallet"
-                    className="p-2 bg-zinc-900/90 hover:bg-rose-950/60 hover:text-rose-400 text-zinc-400 border border-zinc-800 hover:border-rose-900/60 rounded-xl transition"
+                    className="p-2 bg-zinc-900 hover:bg-rose-950/60 hover:text-rose-400 text-zinc-400 border border-zinc-800 hover:border-rose-900/60 rounded-xl transition"
                   >
                     <LogOut className="w-4 h-4" />
                   </button>
@@ -1281,6 +1318,14 @@ export default function App() {
             >
               <Code2 className="w-3.5 h-3.5" /> Specs
             </button>
+            <button
+              onClick={() => setActiveTab('about')}
+              className={`text-xs font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg ${
+                activeTab === 'about' ? 'bg-zinc-800 text-purple-400' : 'text-zinc-400'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" /> About
+            </button>
           </div>
         </header>
 
@@ -1295,7 +1340,7 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-sm font-semibold text-white">Smart Contract Settings</h3>
-                    <p className="text-xs text-zinc-400">GenLayer Studio Next (Chain ID 61997)</p>
+                    <p className="text-xs text-zinc-400">{STUDIONET_CONFIG.name} (Chain ID {STUDIONET_CONFIG.id})</p>
                   </div>
                 </div>
                 <button
@@ -1348,8 +1393,8 @@ export default function App() {
                 </div>
 
                 <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800/80 text-[11px] text-zinc-400 leading-relaxed">
-                  <span className="text-zinc-300 font-semibold block mb-1">Official Deployment (Studio Next 61997):</span>
-                  Official contracts are deployed and verified on GenLayer Studio Next (RPC: studio-next.genlayer.com/api). You can edit contract addresses or reset and purge stale cache anytime.
+                  <span className="text-zinc-300 font-semibold block mb-1">Official Testnet Deployment:</span>
+                  Official contracts are verified live on Studionet RPC with 5 consensus validators. You can switch or reset anytime.
                 </div>
               </div>
 
@@ -1357,9 +1402,9 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleResetToOfficialAddresses}
-                  className="px-3 py-1.5 text-xs text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-900/50 rounded-lg transition"
+                  className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition"
                 >
-                  Reset & Purge Old Cache
+                  Reset to Official
                 </button>
                 <div className="flex items-center gap-2">
                   <button
@@ -1378,6 +1423,27 @@ export default function App() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* WRONG NETWORK BANNER (Enforces GenLayer Studio Next Chain ID 61997) */}
+        {account && currentChainId !== null && currentChainId !== STUDIONET_CONFIG.id && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+            <div className="p-4 bg-amber-950/80 border border-amber-500/80 rounded-xl text-xs text-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl backdrop-blur-md">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 animate-bounce" />
+                <div>
+                  <span className="font-bold text-amber-300">Wrong Network Detected:</span> Wallet is connected to Chain ID <span className="font-mono bg-zinc-900 px-1.5 py-0.5 rounded text-white font-bold">{currentChainId}</span>. AgentEscrowCourt requires <span className="font-bold text-white">GenLayer Studio Next (Chain ID {STUDIONET_CONFIG.id})</span>.
+                </div>
+              </div>
+              <button
+                onClick={switchToStudioNext}
+                className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold rounded-lg transition shadow flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Switch to Studio Next (61997)
+              </button>
             </div>
           </div>
         )}
@@ -1708,7 +1774,7 @@ export default function App() {
                                   <ShieldCheck className="w-3.5 h-3.5" /> Connect Wallet to Claim (15% Stake)
                                 </button>
                               ) : !isClient ? (
-                                claimingTaskId === task.id ? (
+                                task.status === 'CLAIMING_PENDING' || claimingTaskId === task.id ? (
                                   <div className="flex items-center gap-2 px-3.5 py-2 bg-indigo-950/50 border border-indigo-500/30 rounded-xl text-xs text-indigo-300 font-mono">
                                     <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
                                     <span>Staking 15% collateral... 5 Validators voting</span>
@@ -2299,7 +2365,7 @@ export default function App() {
           <Scale className="w-3.5 h-3.5 text-emerald-400" />
           <span className="font-semibold text-zinc-300">AgentEscrowCourt</span>
           <span>•</span>
-          <span>GenLayer Studio Next (Chain ID 61997)</span>
+          <span>{STUDIONET_CONFIG.name} (Chain ID {STUDIONET_CONFIG.id})</span>
         </div>
         <p className="text-[11px] text-zinc-500">
           Decentralized AI Escrow Court powered by GenLayer Intelligent Contracts & Multi-Source Web Rendering.

@@ -1,4 +1,4 @@
-import { encodeFunctionData, parseAbi, toRlp, type Hex } from 'viem';
+import { encodeFunctionData, parseAbi, toRlp, Hex } from 'viem';
 
 export const CONSENSUS_DISPATCHER_ADDRESS = '0x0000000000000000000000000000000000000000';
 

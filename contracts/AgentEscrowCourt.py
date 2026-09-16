@@ -1,10 +1,7 @@
-# { "Depends": "py-genlayer:latest" }
-
-import json
+# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
+from genlayer import *
 from dataclasses import dataclass
-import genlayer as gl
-from genlayer.storage import TreeMap, allow as allow_storage
-
+import json
 
 @allow_storage
 @dataclass
@@ -16,18 +13,17 @@ class EscrowTask:
     criteria_url: str
     criteria_hash: str     # Cryptographic proof pinning (Steward requirement)
     deliverable_url: str
-    amount: gl.bigint
-    worker_stake: gl.bigint
+    amount: bigint
+    worker_stake: bigint
     status: str            # OPEN, IN_PROGRESS, AWAITING_PAYOUT, NEEDS_REVISION, DISPUTED, ESCALATED, CLOSED
-    attempts: gl.bigint
+    attempts: bigint
     verdict: str           # RELEASE, REFUND, RETRY, ESCALATE
     verdict_reason: str
-    confidence: gl.bigint
-    payout_ready_at: gl.bigint
-    deadline: gl.bigint
+    confidence: bigint
+    payout_ready_at: bigint
+    deadline: bigint
 
-
-class Contract(gl.contract.Contract):
+class Contract(gl.Contract):
     platform_admin: str
     reputation_contract: str
     tasks: TreeMap[str, EscrowTask]
@@ -40,7 +36,7 @@ class Contract(gl.contract.Contract):
             self.platform_admin = str(getattr(gl.message, "sender", "0x0000000000000000000000000000000000000000")).lower()
         self.reputation_contract = ""
         self.task_ids_json = "[]"
-        # TreeMap storage field is auto-initialized by GenVM. Rule #2: Do not reassign in __init__.
+        # TreeMap storage is automatically initialized by GenVM. Do not assign self.tasks = TreeMap() in __init__.
 
     def _get_caller(self) -> str:
         try:
@@ -48,7 +44,7 @@ class Contract(gl.contract.Contract):
         except Exception:
             return str(getattr(gl.message, "sender", "0x0000000000000000000000000000000000000000")).lower()
 
-    def _get_current_timestamp(self) -> gl.bigint:
+    def _get_current_timestamp(self) -> bigint:
         dt_raw = gl.message_raw.get("datetime", None) if isinstance(gl.message_raw, dict) else None
         if dt_raw:
             try:
@@ -56,11 +52,11 @@ class Contract(gl.contract.Contract):
                 dt = datetime.fromisoformat(str(dt_raw).replace("Z", "+00:00"))
                 ts = int(dt.timestamp())
                 if ts > 0:
-                    return gl.bigint(ts)
+                    return bigint(ts)
             except Exception:
                 pass
         import time
-        return gl.bigint(int(time.time()))
+        return bigint(int(time.time()))
 
     def _parse_llm_json(self, response_str: str) -> dict:
         if isinstance(response_str, dict):
@@ -95,23 +91,23 @@ class Contract(gl.contract.Contract):
     def set_reputation_contract(self, rep_addr: str) -> None:
         caller = self._get_caller()
         if caller != self.platform_admin:
-            raise gl.UserError("Only platform admin can set reputation contract")
+            raise UserError("Only platform admin can set reputation contract")
         self.reputation_contract = rep_addr.lower().strip()
 
     @gl.public.write.payable
-    def create_escrow(self, task_id: str, title: str, criteria_url: str, criteria_hash: str = "", deadline_hours: gl.bigint = gl.bigint(72)) -> None:
+    def create_escrow(self, task_id: str, title: str, criteria_url: str, criteria_hash: str = "", deadline_hours: bigint = bigint(72)) -> None:
         if task_id in self.tasks:
-            raise gl.UserError(f"Task ID {task_id} already exists")
+            raise UserError(f"Task ID {task_id} already exists")
         amount = gl.message.value
-        if amount <= gl.bigint(0):
-            raise gl.UserError("Escrow reward must be strictly greater than zero")
+        if amount <= bigint(0):
+            raise UserError("Escrow reward must be strictly greater than zero")
         if not criteria_url.startswith("http"):
-            raise gl.UserError("Valid criteria HTTP/HTTPS URL required")
+            raise UserError("Valid criteria HTTP/HTTPS URL required")
 
         c_hash = criteria_hash.strip().lower() if criteria_hash else "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
         caller = self._get_caller()
-        dur = deadline_hours * gl.bigint(3600) if deadline_hours > gl.bigint(0) else gl.bigint(259200)
+        dur = deadline_hours * bigint(3600) if deadline_hours > bigint(0) else bigint(259200)
 
         self.tasks[task_id] = EscrowTask(
             id=task_id,
@@ -122,13 +118,13 @@ class Contract(gl.contract.Contract):
             criteria_hash=c_hash,
             deliverable_url="",
             amount=amount,
-            worker_stake=gl.bigint(0),
+            worker_stake=bigint(0),
             status="OPEN",
-            attempts=gl.bigint(0),
+            attempts=bigint(0),
             verdict="NONE",
             verdict_reason="Awaiting worker acceptance & 15% collateral lock",
-            confidence=gl.bigint(0),
-            payout_ready_at=gl.bigint(0),
+            confidence=bigint(0),
+            payout_ready_at=bigint(0),
             deadline=self._get_current_timestamp() + dur
         )
         try:
@@ -142,18 +138,18 @@ class Contract(gl.contract.Contract):
     @gl.public.write.payable
     def accept_task(self, task_id: str) -> None:
         if task_id not in self.tasks:
-            raise gl.UserError("Task not found")
+            raise UserError("Task not found")
         task = self.tasks[task_id]
         if task.status != "OPEN":
-            raise gl.UserError("Task is not in OPEN status")
+            raise UserError("Task is not in OPEN status")
 
         caller = self._get_caller()
         if caller == task.client:
-            raise gl.UserError("Client cannot accept their own task")
+            raise UserError("Client cannot accept their own task")
 
-        min_stake = (task.amount * gl.bigint(15)) // gl.bigint(100)
-        if gl.message.value < min_stake or gl.message.value <= gl.bigint(0):
-            raise gl.UserError(f"Insufficient stake. Minimum 15% required ({min_stake})")
+        min_stake = (task.amount * bigint(15)) // bigint(100)
+        if gl.message.value < min_stake or gl.message.value <= bigint(0):
+            raise UserError(f"Insufficient stake. Minimum 15% required ({min_stake})")
 
         task.worker = caller
         task.worker_stake = gl.message.value
@@ -163,20 +159,20 @@ class Contract(gl.contract.Contract):
     @gl.public.write
     def submit_deliverable(self, task_id: str, deliverable_url: str) -> None:
         if task_id not in self.tasks:
-            raise gl.UserError("Task not found")
+            raise UserError("Task not found")
         task = self.tasks[task_id]
         caller = self._get_caller()
 
         if caller != task.worker:
-            raise gl.UserError("Only assigned worker can submit deliverable")
+            raise UserError("Only assigned worker can submit deliverable")
         if task.status not in ["IN_PROGRESS", "NEEDS_REVISION"]:
-            raise gl.UserError("Task is not ready for submission")
+            raise UserError("Task is not ready for submission")
         if not deliverable_url.startswith("http"):
-            raise gl.UserError("Valid deliverable HTTP/HTTPS URL required")
+            raise UserError("Valid deliverable HTTP/HTTPS URL required")
 
-        task.attempts += gl.bigint(1)
-        if task.attempts > gl.bigint(3):
-            raise gl.UserError("Maximum 3 submission attempts exceeded")
+        task.attempts += bigint(1)
+        if task.attempts > bigint(3):
+            raise UserError("Maximum 3 submission attempts exceeded")
 
         task.deliverable_url = deliverable_url.strip()
 
@@ -187,7 +183,6 @@ class Contract(gl.contract.Contract):
         attempt_num = str(task.attempts)
 
         def leader_fn() -> dict:
-            import hashlib
             try:
                 c_res = gl.nondet.web.render(criteria_str, mode="text")
                 c_text = str(c_res)
@@ -259,22 +254,22 @@ Respond ONLY with valid JSON:
 
         task.verdict = final_verdict
         task.verdict_reason = reason
-        task.confidence = gl.bigint(conf)
+        task.confidence = bigint(conf)
 
         if final_verdict == "RELEASE":
             task.status = "AWAITING_PAYOUT"
-            task.payout_ready_at = self._get_current_timestamp() + gl.bigint(86400) # 24h cooling-off
-        elif final_verdict == "RETRY" and task.attempts < gl.bigint(3):
+            task.payout_ready_at = self._get_current_timestamp() + bigint(86400) # 24h cooling-off
+        elif final_verdict == "RETRY" and task.attempts < bigint(3):
             task.status = "NEEDS_REVISION"
         elif final_verdict == "REFUND":
-            if task.attempts < gl.bigint(2):
+            if task.attempts < bigint(2):
                 task.status = "NEEDS_REVISION"
             else:
                 task.status = "CLOSED"
                 total_refund = task.amount + task.worker_stake
-                task.amount = gl.bigint(0)
-                task.worker_stake = gl.bigint(0)
-                gl.get_contract_at(gl.Address(task.client)).emit_transfer(value=gl.u256(total_refund))
+                task.amount = bigint(0)
+                task.worker_stake = bigint(0)
+                gl.get_contract_at(Address(task.client)).emit_transfer(value=u256(total_refund))
         else:
             task.status = "ESCALATED"
 
@@ -283,18 +278,18 @@ Respond ONLY with valid JSON:
     @gl.public.write
     def raise_dispute(self, task_id: str, reason: str = "") -> None:
         if task_id not in self.tasks:
-            raise gl.UserError("Task not found")
+            raise UserError("Task not found")
         task = self.tasks[task_id]
         if task.status != "AWAITING_PAYOUT":
-            raise gl.UserError("Task is not in AWAITING_PAYOUT state")
+            raise UserError("Task is not in AWAITING_PAYOUT state")
 
         caller = self._get_caller()
         if caller != task.client and caller != task.worker:
-            raise gl.UserError("Only client or worker can dispute")
+            raise UserError("Only client or worker can dispute")
 
         now = self._get_current_timestamp()
         if now > task.payout_ready_at:
-            raise gl.UserError("24-hour dispute window has elapsed")
+            raise UserError("24-hour dispute window has elapsed")
 
         task.status = "DISPUTED"
         if reason:
@@ -304,32 +299,32 @@ Respond ONLY with valid JSON:
     @gl.public.write
     def finalize_payout(self, task_id: str) -> None:
         if task_id not in self.tasks:
-            raise gl.UserError("Task not found")
+            raise UserError("Task not found")
         task = self.tasks[task_id]
         if task.status != "AWAITING_PAYOUT":
-            raise gl.UserError("Task is not awaiting payout")
+            raise UserError("Task is not awaiting payout")
 
         caller = self._get_caller()
         if caller != task.client and caller != task.worker and caller != self.platform_admin:
-            raise gl.UserError("Unauthorized caller")
+            raise UserError("Unauthorized caller")
 
         now = self._get_current_timestamp()
         if now < task.payout_ready_at:
-            raise gl.UserError("24-hour cooling-off period has not elapsed yet")
+            raise UserError("24-hour cooling-off period has not elapsed yet")
 
         reward = task.amount
         stake = task.worker_stake
         worker_addr = task.worker
         task.status = "CLOSED"
-        task.amount = gl.bigint(0)
-        task.worker_stake = gl.bigint(0)
+        task.amount = bigint(0)
+        task.worker_stake = bigint(0)
 
-        gl.get_contract_at(gl.Address(worker_addr)).emit_transfer(value=gl.u256(reward + stake))
+        gl.get_contract_at(Address(worker_addr)).emit_transfer(value=u256(reward + stake))
 
         # Safe cross-contract invocation passing string worker address
         if self.reputation_contract and len(self.reputation_contract) == 42:
             try:
-                gl.get_contract_at(gl.Address(self.reputation_contract)).update_reputation(worker_addr, True)
+                gl.get_contract_at(Address(self.reputation_contract)).update_reputation(worker_addr, True)
             except Exception:
                 pass
 
@@ -338,31 +333,31 @@ Respond ONLY with valid JSON:
     @gl.public.write
     def recover_stuck_funds(self, task_id: str) -> None:
         if task_id not in self.tasks:
-            raise gl.UserError("Task not found")
+            raise UserError("Task not found")
         task = self.tasks[task_id]
 
         caller = self._get_caller()
         if caller != task.client:
-            raise gl.UserError("Only the client can recover stuck funds")
+            raise UserError("Only the client can recover stuck funds")
 
         now = self._get_current_timestamp()
         if task.status == "OPEN":
             task.status = "CLOSED"
             refund = task.amount
-            task.amount = gl.bigint(0)
+            task.amount = bigint(0)
             self.tasks[task_id] = task
-            gl.get_contract_at(gl.Address(task.client)).emit_transfer(value=gl.u256(refund))
+            gl.get_contract_at(Address(task.client)).emit_transfer(value=u256(refund))
         elif task.status in ["IN_PROGRESS", "NEEDS_REVISION"]:
             if now <= task.deadline:
-                raise gl.UserError("Deadline has not elapsed yet")
+                raise UserError("Deadline has not elapsed yet")
             task.status = "CLOSED"
             total = task.amount + task.worker_stake
-            task.amount = gl.bigint(0)
-            task.worker_stake = gl.bigint(0)
+            task.amount = bigint(0)
+            task.worker_stake = bigint(0)
             self.tasks[task_id] = task
-            gl.get_contract_at(gl.Address(task.client)).emit_transfer(value=gl.u256(total))
+            gl.get_contract_at(Address(task.client)).emit_transfer(value=u256(total))
         else:
-            raise gl.UserError("Current status does not allow stuck fund recovery")
+            raise UserError("Current status does not allow stuck fund recovery")
 
     @gl.public.view
     def get_all_tasks(self) -> str:
