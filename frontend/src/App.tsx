@@ -111,7 +111,7 @@ interface AgentReputationRecord {
   failed_tasks: string;
 }
 
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.3.0';
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
@@ -339,6 +339,43 @@ export default function App() {
       provider: window.ethereum,
     });
 
+    // Estimate or prepare fees distribution so feeValue is strictly positive (avoiding FeeValueMustBeNonZero)
+    let feesPayload: any = undefined;
+    try {
+      const estimated = await writeClient.estimateTransactionFeesForWrite({
+        address: contractAddress as `0x${string}`,
+        functionName,
+        args,
+        value,
+      });
+      if (estimated && estimated.feeValue) {
+        feesPayload = {
+          distribution: estimated.distribution,
+          feeValue: estimated.feeValue,
+        };
+      }
+    } catch (estErr) {
+      console.warn('Fee estimation fallback to Studio preset:', estErr);
+    }
+
+    if (!feesPayload) {
+      feesPayload = {
+        distribution: {
+          leaderTimeunitsAllocation: 100n,
+          validatorTimeunitsAllocation: 200n,
+          appealRounds: 0n,
+          executionBudgetPerRound: 153460800000000n,
+          executionConsumed: 0n,
+          totalMessageFees: 0n,
+          rotations: [3n],
+          maxPriceGenPerTimeUnit: 2n,
+          storageFeeMaxGasPrice: 300000000n,
+          receiptFeeMaxGasPrice: 300000000n,
+        },
+        feeValue: 613843200010352n, // ~0.000613 GEN
+      };
+    }
+
     let txHash: string;
     try {
       txHash = await writeClient.writeContract({
@@ -346,6 +383,7 @@ export default function App() {
         functionName,
         args,
         value,
+        fees: feesPayload,
       });
     } catch (ethErr: any) {
       console.error('MetaMask transaction rejected or failed:', ethErr);
