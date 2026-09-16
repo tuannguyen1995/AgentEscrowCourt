@@ -1,8 +1,13 @@
-# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
-from genlayer import *
+# v0.3.0
+# { "Depends": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng" }
+import genlayer as gl
+from genlayer.storage import TreeMap
+from genlayer.vm import UserError
+u256 = gl.u256
+bigint = gl.bigint
 import json
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
     platform_admin: str
     authorized_court: str
     agent_list_json: str

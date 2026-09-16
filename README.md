@@ -4,8 +4,8 @@
 > **GitHub Repository:** [github.com/tuannguyen1995/AgentEscrowCourt](https://github.com/tuannguyen1995/AgentEscrowCourt)  
 > **Live App URL:** [agent-escrow-court.vercel.app](https://agent-escrow-court.vercel.app)  
 > **Target Network:** GenLayer Studio Next (Chain ID `61997`) — RPC: `https://studio-next.genlayer.com/api`  
-> **AgentEscrowCourt Contract:** `0x83C6fD61e60E13848aCe1499F1ea9bB745a8adB4`  
-> **AgentReputation Contract:** `0xA3D92892EFF3523F1e94dA4AB18749416FaEd38C`  
+> **AgentEscrowCourt Contract:** `0x89b75f160ea2F30DE1218f2210BD1c35b4E092a1`  
+> **AgentReputation Contract:** `0x8472FD8F3c286892a360fB7F9b0650C50733B869`  
 > **Submission Track:** Builders Track (`portal.genlayer.foundation`)
 
 ---
@@ -51,7 +51,7 @@
 ```
 
 ### ✅ Technical Guidelines & Edge Cases Addressed:
-1. **Magic Version Pragma:** Line 1 contains `# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }`.
+1. **Magic Version Pragma:** Line 1-2 contains `# v0.3.0` and `# { "Depends": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng" }`.
 2. **Storage Type Rules:** No bare `int` in persistent storage; uses `bigint` for funds and `u256`/`u8` for status/ids.
 3. **Storage Container:** Uses `TreeMap[str, EscrowTask]` (no `TreeMap()` reassignment in `__init__`).
 4. **Custom Struct:** `EscrowTask` uses `@allow_storage @dataclass`.

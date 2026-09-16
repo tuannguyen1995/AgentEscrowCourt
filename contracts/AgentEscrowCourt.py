@@ -1,9 +1,18 @@
-# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
-from genlayer import *
+# v0.3.0
+# { "Depends": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng" }
+import genlayer as gl
+from genlayer.contract import Contract, get_at
+from genlayer.storage import TreeMap, allow
+from genlayer.vm import UserError, run_nondet, Return
+from genlayer.types import Address
+import genlayer.nondet as nondet
 from dataclasses import dataclass
 import json
 
-@allow_storage
+u256 = gl.u256
+bigint = gl.bigint
+
+@allow
 @dataclass
 class EscrowTask:
     id: str
@@ -23,7 +32,7 @@ class EscrowTask:
     payout_ready_at: bigint
     deadline: bigint
 
-class Contract(gl.Contract):
+class Contract(gl.contract.Contract):
     platform_admin: str
     reputation_contract: str
     tasks: TreeMap[str, EscrowTask]
@@ -45,18 +54,13 @@ class Contract(gl.Contract):
             return str(getattr(gl.message, "sender", "0x0000000000000000000000000000000000000000")).lower()
 
     def _get_current_timestamp(self) -> bigint:
-        dt_raw = gl.message_raw.get("datetime", None) if isinstance(gl.message_raw, dict) else None
-        if dt_raw:
-            try:
-                from datetime import datetime
-                dt = datetime.fromisoformat(str(dt_raw).replace("Z", "+00:00"))
-                ts = int(dt.timestamp())
-                if ts > 0:
-                    return bigint(ts)
-            except Exception:
-                pass
-        import time
-        return bigint(int(time.time()))
+        try:
+            from datetime import datetime
+            dt_str = str(gl.message.datetime)
+            dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+            return bigint(int(dt.timestamp()))
+        except Exception:
+            return bigint(1789548000)
 
     def _parse_llm_json(self, response_str: str) -> dict:
         if isinstance(response_str, dict):
@@ -104,7 +108,7 @@ class Contract(gl.Contract):
         if not criteria_url.startswith("http"):
             raise UserError("Valid criteria HTTP/HTTPS URL required")
 
-        c_hash = criteria_hash.strip().lower() if criteria_hash else "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        c_hash = criteria_hash.strip().lower() if criteria_hash else ""
 
         caller = self._get_caller()
         dur = deadline_hours * bigint(3600) if deadline_hours > bigint(0) else bigint(259200)
@@ -183,8 +187,9 @@ class Contract(gl.Contract):
         attempt_num = str(task.attempts)
 
         def leader_fn() -> dict:
+            import hashlib
             try:
-                c_res = gl.nondet.web.render(criteria_str, mode="text")
+                c_res = nondet.web.render(criteria_str, mode="text")
                 c_text = str(c_res)
                 if any(err in c_text[:400].lower() for err in ["404 not found", "error 404"]):
                     return {"verdict": "ESCALATE", "confidence": 100, "reason": "Criteria spec endpoint is 404; escrow held."}
@@ -198,7 +203,7 @@ class Contract(gl.Contract):
                 return {"verdict": "ESCALATE", "confidence": 100, "reason": f"Criteria fetch failed: {str(e)}"}
 
             try:
-                d_res = gl.nondet.web.render(deliverable_str, mode="text")
+                d_res = nondet.web.render(deliverable_str, mode="text")
                 d_text = str(d_res)
                 if any(err in d_text[:400].lower() for err in ["404 not found", "error 404"]):
                     return {"verdict": "REFUND", "confidence": 100, "reason": "Deliverable endpoint is 404 or empty."}
@@ -224,13 +229,13 @@ DECISION FRAMEWORK:
 Respond ONLY with valid JSON:
 {{"verdict": "RELEASE|REFUND|RETRY|ESCALATE", "confidence": 0-100, "reason": "Detailed step-by-step evaluation trace."}}"""
 
-            res = gl.nondet.exec_prompt(prompt, response_format="json")
+            res = nondet.exec_prompt(prompt, response_format="json")
             if isinstance(res, dict):
                 return res
             return self._parse_llm_json(str(res))
 
         def validator_fn(leader_res) -> bool:
-            if not isinstance(leader_res, gl.vm.Return):
+            if not isinstance(leader_res, Return):
                 return False
             leader_data = leader_res.calldata if hasattr(leader_res, "calldata") else leader_res
             if not isinstance(leader_data, dict):
@@ -238,7 +243,7 @@ Respond ONLY with valid JSON:
             mine_data = leader_fn()
             return self._effective_verdict(leader_data) == self._effective_verdict(mine_data)
 
-        result = gl.vm.run_nondet(leader_fn, validator_fn)
+        result = run_nondet(leader_fn, validator_fn)
         if not isinstance(result, dict):
             result = self._parse_llm_json(str(result))
 
@@ -269,7 +274,7 @@ Respond ONLY with valid JSON:
                 total_refund = task.amount + task.worker_stake
                 task.amount = bigint(0)
                 task.worker_stake = bigint(0)
-                gl.get_contract_at(Address(task.client)).emit_transfer(value=u256(total_refund))
+                get_at(Address(task.client)).emit_transfer(value=u256(total_refund))
         else:
             task.status = "ESCALATED"
 
@@ -319,12 +324,12 @@ Respond ONLY with valid JSON:
         task.amount = bigint(0)
         task.worker_stake = bigint(0)
 
-        gl.get_contract_at(Address(worker_addr)).emit_transfer(value=u256(reward + stake))
+        get_at(Address(worker_addr)).emit_transfer(value=u256(reward + stake))
 
         # Safe cross-contract invocation passing string worker address
         if self.reputation_contract and len(self.reputation_contract) == 42:
             try:
-                gl.get_contract_at(Address(self.reputation_contract)).update_reputation(worker_addr, True)
+                get_at(Address(self.reputation_contract)).emit("update_reputation", worker_addr, True)
             except Exception:
                 pass
 
@@ -346,7 +351,7 @@ Respond ONLY with valid JSON:
             refund = task.amount
             task.amount = bigint(0)
             self.tasks[task_id] = task
-            gl.get_contract_at(Address(task.client)).emit_transfer(value=u256(refund))
+            get_at(Address(task.client)).emit_transfer(value=u256(refund))
         elif task.status in ["IN_PROGRESS", "NEEDS_REVISION"]:
             if now <= task.deadline:
                 raise UserError("Deadline has not elapsed yet")
@@ -355,7 +360,7 @@ Respond ONLY with valid JSON:
             task.amount = bigint(0)
             task.worker_stake = bigint(0)
             self.tasks[task_id] = task
-            gl.get_contract_at(Address(task.client)).emit_transfer(value=u256(total))
+            get_at(Address(task.client)).emit_transfer(value=u256(total))
         else:
             raise UserError("Current status does not allow stuck fund recovery")
 
