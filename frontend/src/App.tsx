@@ -1217,45 +1217,32 @@ export default function App() {
               {account ? (
                 <>
                   {/* Real Balance Chip */}
-                  <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-mono">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900/90 border border-zinc-800 rounded-xl text-xs font-mono transition shadow-sm">
                     <Coins className="w-3.5 h-3.5 text-amber-400" />
                     <span className="font-semibold text-white">{userBalance}</span>
-                    <span className="text-zinc-400">GEN</span>
+                    <span className="text-zinc-400 text-[11px]">GEN</span>
                   </div>
-
-                  {/* Faucet +50 GEN */}
-                  <button
-                    onClick={handleFaucet}
-                    disabled={loading}
-                    title="Claim 50 testnet GEN faucet"
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-medium transition"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                    <span className="hidden sm:inline">Faucet</span> +50
-                  </button>
 
                   {/* Connected Wallet Pill */}
                   <div
                     onClick={() => handleCopy(account, 'account')}
                     title="Click to copy wallet address"
-                    className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800/80 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-mono text-zinc-300 cursor-pointer transition"
+                    className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-mono text-zinc-300 cursor-pointer transition shadow-sm"
                   >
-                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                     <span>{account.slice(0, 6)}...{account.slice(-4)}</span>
                     {copiedAddress === 'account' ? (
-                      <Check className="w-3 h-3 text-emerald-400" />
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
                     ) : (
-                      <Copy className="w-3 h-3 text-zinc-500" />
+                      <Copy className="w-3.5 h-3.5 text-zinc-500 hover:text-zinc-300 transition" />
                     )}
                   </div>
-
-
 
                   {/* Disconnect */}
                   <button
                     onClick={disconnectWallet}
                     title="Disconnect wallet"
-                    className="p-2 bg-zinc-900 hover:bg-rose-950/60 hover:text-rose-400 text-zinc-400 border border-zinc-800 hover:border-rose-900/60 rounded-xl transition"
+                    className="p-2 bg-zinc-900/90 hover:bg-rose-950/60 hover:text-rose-400 text-zinc-400 border border-zinc-800 hover:border-rose-900/60 rounded-xl transition shadow-sm"
                   >
                     <LogOut className="w-4 h-4" />
                   </button>
