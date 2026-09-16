@@ -1,6 +1,6 @@
 import { encodeFunctionData, parseAbi, toRlp } from 'viem';
 
-export const CONSENSUS_DISPATCHER_ADDRESS = '0x0000000000000000000000000000000000000000';
+export const CONSENSUS_DISPATCHER_ADDRESS = '0xb7278A61aa25c888815aFC32Ad3cC52fF24fE575';
 
 const ADD_TX_ABI = parseAbi([
   'function addTransaction(address sender, address recipient, uint256 numValidators, uint256 maxRotations, bytes data) returns (bytes32)'

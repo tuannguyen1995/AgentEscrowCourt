@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createClient } from 'genlayer-js';
+import { studioDevnet } from 'genlayer-js/chains';
 import { toRlp, toHex } from 'viem';
 import {
   ShieldCheck,
@@ -110,7 +111,7 @@ interface AgentReputationRecord {
   failed_tasks: string;
 }
 
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '2.2.0';
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
@@ -332,28 +333,19 @@ export default function App() {
 
     setStepMessage(`Please confirm transaction (${functionName}) in your MetaMask popup...`);
 
-    // Dispatches via GenLayer consensus with addTransaction calldata directly to the contract address
-    const addTxData = buildAddTransactionPayload(
-      activeAddr,
-      contractAddress,
-      functionName,
-      args
-    );
-    const valueHex = '0x' + value.toString(16);
-
-    const txParams = {
-      from: activeAddr,
-      to: contractAddress,
-      data: addTxData,
-      value: valueHex,
-      gas: '0x7a120', // 500,000 gas limit
-    };
+    const writeClient = createClient({
+      chain: studioDevnet,
+      account: activeAddr as `0x${string}`,
+      provider: window.ethereum,
+    });
 
     let txHash: string;
     try {
-      txHash = await window.ethereum.request({
-        method: 'eth_sendTransaction',
-        params: [txParams],
+      txHash = await writeClient.writeContract({
+        address: contractAddress as `0x${string}`,
+        functionName,
+        args,
+        value,
       });
     } catch (ethErr: any) {
       console.error('MetaMask transaction rejected or failed:', ethErr);
@@ -748,7 +740,7 @@ export default function App() {
       const txHash = await sendMetaMaskTransaction(
         escrowContractAddress,
         'create_escrow',
-        [tid, createdTitle, cUrl, cHash, dHours],
+        [tid, createdTitle, cUrl, cHash, BigInt(dHours)],
         weiAmount
       );
 
