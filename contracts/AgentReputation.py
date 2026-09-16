@@ -18,10 +18,8 @@ class Contract(gl.Contract):
             self.platform_admin = str(getattr(gl.message, "sender", "0x0000000000000000000000000000000000000000")).lower()
         self.authorized_court = self.platform_admin
         self.agent_list_json = "[]"
-        self.scores = TreeMap()
-        self.total_tasks = TreeMap()
-        self.successful_tasks = TreeMap()
-        self.failed_tasks = TreeMap()
+        # TreeMap storage fields (scores, total_tasks, successful_tasks, failed_tasks)
+        # are automatically initialized to empty by GenVM. Rule #2: Do not reassign in __init__.
 
     def _get_caller(self) -> str:
         try:

@@ -2,7 +2,6 @@
 from genlayer import *
 from dataclasses import dataclass
 import json
-import hashlib
 
 @allow_storage
 @dataclass
@@ -37,7 +36,7 @@ class Contract(gl.Contract):
             self.platform_admin = str(getattr(gl.message, "sender", "0x0000000000000000000000000000000000000000")).lower()
         self.reputation_contract = ""
         self.task_ids_json = "[]"
-        self.tasks = TreeMap()
+        # TreeMap storage field (self.tasks) is auto-initialized by GenVM. Rule #2: Do not reassign in __init__.
 
     def _get_caller(self) -> str:
         try:
@@ -184,6 +183,7 @@ class Contract(gl.Contract):
         attempt_num = str(task.attempts)
 
         def leader_fn() -> dict:
+            import hashlib
             try:
                 c_res = gl.nondet.web.render(criteria_str, mode="text")
                 c_text = str(c_res)
