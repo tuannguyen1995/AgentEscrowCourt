@@ -110,7 +110,7 @@ interface AgentReputationRecord {
   failed_tasks: string;
 }
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '2.1.0';
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
@@ -632,6 +632,8 @@ export default function App() {
       localStorage.removeItem('connected_wallet_account');
       localStorage.removeItem('pending_escrow_tasks');
       localStorage.removeItem('cached_onchain_tasks');
+      localStorage.removeItem('escrow_contract_addr');
+      localStorage.removeItem('reputation_contract_addr');
       Object.keys(localStorage).forEach(key => {
         if (key.startsWith('genlayer_pk_')) localStorage.removeItem(key);
       });

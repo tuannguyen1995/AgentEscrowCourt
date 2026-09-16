@@ -13,7 +13,7 @@ import time
 import json
 from genlayer_py import create_client, create_account, generate_private_key, studionet
 
-ESCROW_CONTRACT = '0xFAD28fb892F51c2491DD991D50E909dAda8Ec5aD'
+ESCROW_CONTRACT = '0x83C6fD61e60E13848aCe1499F1ea9bB745a8adB4'
 
 CRITERIA_URL = 'https://raw.githubusercontent.com/tuannguyen1995/AgentEscrowCourt/master/README.md'
 DELIVERABLE_URL = 'https://raw.githubusercontent.com/tuannguyen1995/AgentEscrowCourt/master/README.md'
@@ -40,8 +40,8 @@ def main():
     client_acc = create_account(generate_private_key())
     worker_acc = create_account(generate_private_key())
 
-    client_cli = create_client(chain=studionet, account=client_acc)
-    worker_cli = create_client(chain=studionet, account=worker_acc)
+    client_cli = create_client(endpoint='https://studio-next.genlayer.com/api', account=client_acc)
+    worker_cli = create_client(endpoint='https://studio-next.genlayer.com/api', account=worker_acc)
 
     print(f"Client Address: {client_acc.address}")
     print(f"Worker Address: {worker_acc.address}\n")
