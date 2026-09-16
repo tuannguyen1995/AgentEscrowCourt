@@ -276,35 +276,6 @@ export default function App() {
     }
   }, [account]);
 
-  const handleFaucet = async () => {
-    if (!account) {
-      alert('Please connect your wallet before requesting testnet GEN.');
-      return;
-    }
-    setLoading(true);
-    setTxError(null);
-    setStepMessage('Dispensing 50 testnet GEN to your wallet on GenLayer Studio Next...');
-    try {
-      await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'sim_fundAccount',
-          params: [account.toLowerCase(), 50000000000000000000] // 50 GEN
-        })
-      });
-      await fetchUserBalance(account);
-      setSuccessBanner(`🎉 Successfully received 50 testnet GEN for ${account.slice(0, 6)}...${account.slice(-4)}!`);
-    } catch (err: any) {
-      setTxError(err.message || 'Failed to claim testnet GEN faucet.');
-    } finally {
-      setLoading(false);
-      setStepMessage('');
-    }
-  };
-
 
 
   // 1. BROADCAST TRANSACTION VIA METAMASK (RETURNS txHash IMMEDIATELY IN 1-2 SECONDS)
@@ -1129,7 +1100,7 @@ export default function App() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
             
             {/* BRAND */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
                 <Scale className="w-5 h-5" />
               </div>
@@ -1213,49 +1184,36 @@ export default function App() {
             </nav>
 
             {/* WALLET & ACTION BUTTONS */}
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 shrink-0">
               {account ? (
                 <>
                   {/* Real Balance Chip */}
-                  <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-mono">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900/90 border border-zinc-800 rounded-xl text-xs font-mono">
                     <Coins className="w-3.5 h-3.5 text-amber-400" />
                     <span className="font-semibold text-white">{userBalance}</span>
-                    <span className="text-zinc-400">GEN</span>
+                    <span className="text-zinc-400 text-[11px]">GEN</span>
                   </div>
-
-                  {/* Faucet +50 GEN */}
-                  <button
-                    onClick={handleFaucet}
-                    disabled={loading}
-                    title="Claim 50 testnet GEN faucet"
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-medium transition"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                    <span className="hidden sm:inline">Faucet</span> +50
-                  </button>
 
                   {/* Connected Wallet Pill */}
                   <div
                     onClick={() => handleCopy(account, 'account')}
                     title="Click to copy wallet address"
-                    className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800/80 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-mono text-zinc-300 cursor-pointer transition"
+                    className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-mono text-zinc-300 hover:text-white cursor-pointer transition"
                   >
-                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
                     <span>{account.slice(0, 6)}...{account.slice(-4)}</span>
                     {copiedAddress === 'account' ? (
-                      <Check className="w-3 h-3 text-emerald-400" />
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
                     ) : (
-                      <Copy className="w-3 h-3 text-zinc-500" />
+                      <Copy className="w-3.5 h-3.5 text-zinc-500" />
                     )}
                   </div>
-
-
 
                   {/* Disconnect */}
                   <button
                     onClick={disconnectWallet}
                     title="Disconnect wallet"
-                    className="p-2 bg-zinc-900 hover:bg-rose-950/60 hover:text-rose-400 text-zinc-400 border border-zinc-800 hover:border-rose-900/60 rounded-xl transition"
+                    className="p-2 bg-zinc-900/90 hover:bg-rose-950/60 hover:text-rose-400 text-zinc-400 border border-zinc-800 hover:border-rose-900/60 rounded-xl transition"
                   >
                     <LogOut className="w-4 h-4" />
                   </button>
