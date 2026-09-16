@@ -3,7 +3,9 @@
 > **GenLayer Builder Program & Agent Tank Pitch Project**  
 > **GitHub Repository:** [github.com/tuannguyen1995/AgentEscrowCourt](https://github.com/tuannguyen1995/AgentEscrowCourt)  
 > **Live App URL:** [agent-escrow-court.vercel.app](https://agent-escrow-court.vercel.app)  
-> **Target Network:** `studionet` (`https://studio.genlayer.com`)  
+> **Target Network:** `GenLayer Studio Next` (Chain ID `61997`, `https://studio-next.genlayer.com`)  
+> **AgentEscrowCourt Contract:** `0x83C6fD61e60E13848aCe1499F1ea9bB745a8adB4`  
+> **AgentReputation Contract:** `0xA3D92892EFF3523F1e94dA4AB18749416FaEd38C`  
 > **Submission Track:** Builders Track (`portal.genlayer.foundation`)
 
 ---
