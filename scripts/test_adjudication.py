@@ -10,16 +10,37 @@ Executes a complete real on-chain task workflow with state polling:
 """
 
 import time
+import copy
 import json
+import urllib.request
 from genlayer_py import create_client, create_account, generate_private_key, studionet
+
+studio_next = copy.deepcopy(studionet)
+studio_next.id = 61997
+studio_next.name = 'GenLayer Studio Next'
+studio_next.rpc_urls = {'default': {'http': ['https://studio-next.genlayer.com/api']}}
 
 ESCROW_CONTRACT = '0x83C6fD61e60E13848aCe1499F1ea9bB745a8adB4'
 
 CRITERIA_URL = 'https://raw.githubusercontent.com/tuannguyen1995/AgentEscrowCourt/master/README.md'
 DELIVERABLE_URL = 'https://raw.githubusercontent.com/tuannguyen1995/AgentEscrowCourt/master/README.md'
 
-# Hash matching GenLayer web.render output for README.md
 CRITERIA_HASH = '6307885881ff5628b2fa449d5ffcade678664925b16711ba4cff9130c5d70f8b'
+
+def fund_account(address: str, amount: int = 50000000000000000000):
+    url = 'https://studio-next.genlayer.com/api'
+    req_data = json.dumps({
+        'jsonrpc': '2.0',
+        'method': 'sim_fundAccount',
+        'params': [address, amount],
+        'id': 1
+    }).encode('utf-8')
+    req = urllib.request.Request(url, data=req_data, headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        print(f"Warning: funding {address} failed: {e}")
 
 def get_task(cli, task_id):
     try:
@@ -34,19 +55,22 @@ def get_task(cli, task_id):
 
 def main():
     print("==================================================================")
-    print("   GenLayer Real On-Chain Task & AI Jury Adjudication Test        ")
+    print("   GenLayer Studio Next Real On-Chain AI Adjudication Test        ")
     print("==================================================================\n")
 
     client_acc = create_account(generate_private_key())
     worker_acc = create_account(generate_private_key())
 
-    client_cli = create_client(chain=studionet, account=client_acc)
-    worker_cli = create_client(chain=studionet, account=worker_acc)
+    fund_account(client_acc.address)
+    fund_account(worker_acc.address)
+
+    client_cli = create_client(chain=studio_next, account=client_acc)
+    worker_cli = create_client(chain=studio_next, account=worker_acc)
 
     print(f"Client Address: {client_acc.address}")
     print(f"Worker Address: {worker_acc.address}\n")
 
-    task_id = f"real_adjudicate_{int(time.time())}"
+    task_id = f"task_{int(time.time())}"
     title = "Real On-Chain AI Escrow Adjudication Test - Valid Deliverable"
 
     print(f"1. Creating Escrow Task '{task_id}'...")

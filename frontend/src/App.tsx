@@ -412,7 +412,7 @@ export default function App() {
   // Connect wallet directly via MetaMask
   const connectWallet = async () => {
     if (typeof window.ethereum === 'undefined') {
-      alert('MetaMask is not installed. Please install MetaMask to interact with GenLayer Studionet.');
+      alert('MetaMask is not installed. Please install MetaMask to interact with GenLayer Studio Next.');
       return;
     }
     try {
@@ -762,7 +762,7 @@ export default function App() {
       // Switch to Escrows tab immediately so user sees their new task right away!
       setActiveTab('escrows');
       setStatusFilter('ALL');
-      setSuccessBanner(`🎉 Task #${tid} (${createdAmount} GEN) broadcasted to Studionet! 5 Validators are voting...`);
+      setSuccessBanner(`🎉 Task #${tid} (${createdAmount} GEN) broadcasted to GenLayer Studio Next! 5 Validators are voting...`);
       setLoading(false);
       setStepMessage(`Tx broadcasted (${txHash.slice(0, 10)}...)! 5 Validators voting on consensus...`);
 
