@@ -110,7 +110,22 @@ interface AgentReputationRecord {
   failed_tasks: string;
 }
 
-const APP_VERSION = '1.0.0';
+const CURRENT_APP_VERSION = '2.0.0-chain-61997';
+
+// Auto-purge stale cache from older versions / older chains (e.g., chain 61999)
+if (typeof window !== 'undefined') {
+  try {
+    const savedVersion = localStorage.getItem('app_version');
+    if (savedVersion !== CURRENT_APP_VERSION) {
+      console.log(`[AgentEscrowCourt] App version upgraded to ${CURRENT_APP_VERSION}. Purging stale chain 61999 cache...`);
+      localStorage.removeItem('cached_onchain_tasks');
+      localStorage.removeItem('pending_escrow_tasks');
+      localStorage.removeItem('escrow_contract_addr');
+      localStorage.removeItem('reputation_contract_addr');
+      localStorage.setItem('app_version', CURRENT_APP_VERSION);
+    }
+  } catch (_) {}
+}
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
@@ -212,9 +227,13 @@ export default function App() {
     setReputationContractAddress(DEFAULT_REPUTATION_CONTRACT_ADDRESS);
     localStorage.setItem('escrow_contract_addr', DEFAULT_ESCROW_CONTRACT_ADDRESS);
     localStorage.setItem('reputation_contract_addr', DEFAULT_REPUTATION_CONTRACT_ADDRESS);
+    localStorage.removeItem('cached_onchain_tasks');
+    localStorage.removeItem('pending_escrow_tasks');
+    setTasks([]);
+    setPendingTasks([]);
     fetchTasksFromContract();
     fetchLeaderboardFromContract();
-    alert('Reset to official contracts on GenLayer Studionet:\n• Escrow: ' + DEFAULT_ESCROW_CONTRACT_ADDRESS + '\n• Reputation: ' + DEFAULT_REPUTATION_CONTRACT_ADDRESS);
+    alert('Reset to official contracts on GenLayer Studio Next (Chain ID 61997):\n• Escrow: ' + DEFAULT_ESCROW_CONTRACT_ADDRESS + '\n• Reputation: ' + DEFAULT_REPUTATION_CONTRACT_ADDRESS + '\n\nAll old cache has been purged!');
   };
 
   const fetchUserBalance = useCallback(async (targetAddr?: string | null) => {
@@ -264,7 +283,7 @@ export default function App() {
     }
     setLoading(true);
     setTxError(null);
-    setStepMessage('Dispensing 50 testnet GEN to your wallet on GenLayer Studionet...');
+    setStepMessage('Dispensing 50 testnet GEN to your wallet on GenLayer Studio Next...');
     try {
       await fetch(STUDIONET_CONFIG.rpcUrls.default.http[0], {
         method: 'POST',
@@ -305,7 +324,7 @@ export default function App() {
       throw new Error('No active wallet account connected in MetaMask.');
     }
 
-    // Ensure MetaMask is on GenLayer Studionet (Chain ID 61999)
+    // Ensure MetaMask is on GenLayer Studio Next (Chain ID 61997)
     const CHAIN_ID_HEX = '0x' + STUDIONET_CONFIG.id.toString(16);
     try {
       await window.ethereum.request({
@@ -1315,7 +1334,7 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-sm font-semibold text-white">Smart Contract Settings</h3>
-                    <p className="text-xs text-zinc-400">GenLayer Studionet (Chain ID 61999)</p>
+                    <p className="text-xs text-zinc-400">GenLayer Studio Next (Chain ID 61997)</p>
                   </div>
                 </div>
                 <button
@@ -1368,8 +1387,8 @@ export default function App() {
                 </div>
 
                 <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800/80 text-[11px] text-zinc-400 leading-relaxed">
-                  <span className="text-zinc-300 font-semibold block mb-1">Official Testnet Deployment:</span>
-                  Official contracts are verified live on Studionet RPC with 5 consensus validators. You can switch or reset anytime.
+                  <span className="text-zinc-300 font-semibold block mb-1">Official Deployment (Studio Next 61997):</span>
+                  Official contracts are deployed and verified on GenLayer Studio Next (RPC: studio-next.genlayer.com/api). You can edit contract addresses or reset and purge stale cache anytime.
                 </div>
               </div>
 
@@ -1377,9 +1396,9 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleResetToOfficialAddresses}
-                  className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition"
+                  className="px-3 py-1.5 text-xs text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-900/50 rounded-lg transition"
                 >
-                  Reset to Official
+                  Reset & Purge Old Cache
                 </button>
                 <div className="flex items-center gap-2">
                   <button
@@ -2319,7 +2338,7 @@ export default function App() {
           <Scale className="w-3.5 h-3.5 text-emerald-400" />
           <span className="font-semibold text-zinc-300">AgentEscrowCourt</span>
           <span>•</span>
-          <span>GenLayer Studionet (Chain ID 61999)</span>
+          <span>GenLayer Studio Next (Chain ID 61997)</span>
         </div>
         <p className="text-[11px] text-zinc-500">
           Decentralized AI Escrow Court powered by GenLayer Intelligent Contracts & Multi-Source Web Rendering.

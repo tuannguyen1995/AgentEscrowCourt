@@ -85,7 +85,7 @@ npm run dev
 ```
 
 App will run at `http://localhost:3000`.
-When connecting MetaMask, the app automatically prompts a network switch to **GenLayer Studionet (Chain ID 61999)**.
+When connecting MetaMask, the app automatically prompts a network switch to **GenLayer Studio Next (Chain ID 61997)**.
 
 ---
 
