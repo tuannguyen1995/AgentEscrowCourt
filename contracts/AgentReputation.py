@@ -1,15 +1,18 @@
-# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
-from genlayer import *
-import json
+# { "Depends": "py-genlayer:latest" }
 
-class Contract(gl.Contract):
+import json
+import genlayer as gl
+from genlayer.storage import TreeMap
+
+
+class Contract(gl.contract.Contract):
     platform_admin: str
     authorized_court: str
     agent_list_json: str
-    scores: TreeMap[str, u256]
-    total_tasks: TreeMap[str, u256]
-    successful_tasks: TreeMap[str, u256]
-    failed_tasks: TreeMap[str, u256]
+    scores: TreeMap[str, gl.u256]
+    total_tasks: TreeMap[str, gl.u256]
+    successful_tasks: TreeMap[str, gl.u256]
+    failed_tasks: TreeMap[str, gl.u256]
 
     def __init__(self):
         try:
@@ -18,8 +21,7 @@ class Contract(gl.Contract):
             self.platform_admin = str(getattr(gl.message, "sender", "0x0000000000000000000000000000000000000000")).lower()
         self.authorized_court = self.platform_admin
         self.agent_list_json = "[]"
-        # TreeMap storage fields (scores, total_tasks, successful_tasks, failed_tasks)
-        # are automatically initialized to empty by GenVM. Rule #2: Do not reassign in __init__.
+        # TreeMap storage fields are automatically initialized to empty by GenVM. Rule #2: Do not reassign in __init__.
 
     def _get_caller(self) -> str:
         try:
@@ -31,14 +33,14 @@ class Contract(gl.Contract):
     def set_authorized_court(self, court_address: str) -> None:
         caller = self._get_caller()
         if caller != self.platform_admin:
-            raise UserError("Only platform admin can set authorized court")
+            raise gl.UserError("Only platform admin can set authorized court")
         self.authorized_court = str(court_address).lower().strip()
 
     @gl.public.write
     def update_reputation(self, agent: str, is_success: bool) -> None:
         caller = self._get_caller()
         if caller != self.authorized_court and caller != self.platform_admin:
-            raise UserError("Unauthorized caller")
+            raise gl.UserError("Unauthorized caller")
 
         agent_key = str(agent).lower().strip()
 
@@ -48,10 +50,10 @@ class Contract(gl.Contract):
             succ = self.successful_tasks[agent_key]
             fail = self.failed_tasks[agent_key]
         else:
-            current_score = u256(100)
-            tot = u256(0)
-            succ = u256(0)
-            fail = u256(0)
+            current_score = gl.u256(100)
+            tot = gl.u256(0)
+            succ = gl.u256(0)
+            fail = gl.u256(0)
             
             try:
                 agents = json.loads(self.agent_list_json)
@@ -61,24 +63,24 @@ class Contract(gl.Contract):
                 agents.append(agent_key)
                 self.agent_list_json = json.dumps(agents)
 
-        self.total_tasks[agent_key] = tot + u256(1)
+        self.total_tasks[agent_key] = tot + gl.u256(1)
 
         if is_success:
-            self.successful_tasks[agent_key] = succ + u256(1)
-            self.scores[agent_key] = current_score + u256(10)
+            self.successful_tasks[agent_key] = succ + gl.u256(1)
+            self.scores[agent_key] = current_score + gl.u256(10)
         else:
-            self.failed_tasks[agent_key] = fail + u256(1)
-            if current_score >= u256(20):
-                self.scores[agent_key] = current_score - u256(20)
+            self.failed_tasks[agent_key] = fail + gl.u256(1)
+            if current_score >= gl.u256(20):
+                self.scores[agent_key] = current_score - gl.u256(20)
             else:
-                self.scores[agent_key] = u256(0)
+                self.scores[agent_key] = gl.u256(0)
 
     @gl.public.view
-    def get_reputation(self, agent: str) -> u256:
+    def get_reputation(self, agent: str) -> gl.u256:
         agent_key = str(agent).lower().strip()
         if agent_key in self.scores:
             return self.scores[agent_key]
-        return u256(100)
+        return gl.u256(100)
 
     @gl.public.view
     def get_all_reputations(self) -> str:
@@ -89,10 +91,10 @@ class Contract(gl.Contract):
 
         res = []
         for a in agents:
-            score = self.scores[a] if a in self.scores else u256(100)
-            tot = self.total_tasks[a] if a in self.total_tasks else u256(0)
-            succ = self.successful_tasks[a] if a in self.successful_tasks else u256(0)
-            fail = self.failed_tasks[a] if a in self.failed_tasks else u256(0)
+            score = self.scores[a] if a in self.scores else gl.u256(100)
+            tot = self.total_tasks[a] if a in self.total_tasks else gl.u256(0)
+            succ = self.successful_tasks[a] if a in self.successful_tasks else gl.u256(0)
+            fail = self.failed_tasks[a] if a in self.failed_tasks else gl.u256(0)
             res.append({
                 "agent": a,
                 "score": str(score),
