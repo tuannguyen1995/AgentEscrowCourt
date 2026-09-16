@@ -1034,6 +1034,12 @@ export default function App() {
 
   const filteredTasks = allDisplayTasks.filter(task => {
     if (statusFilter === 'ALL') return true;
+    if (statusFilter === 'MY_CREATED') {
+      return !!(account && task.client && account.trim().toLowerCase() === task.client.trim().toLowerCase());
+    }
+    if (statusFilter === 'MY_WORKING') {
+      return !!(account && task.worker && account.trim().toLowerCase() === task.worker.trim().toLowerCase() && task.worker !== '0x0000000000000000000000000000000000000000');
+    }
     if (statusFilter === 'OPEN') return task.status === 'OPEN' || task.status === 'PENDING_CONSENSUS';
     return task.status === statusFilter;
   });
@@ -1567,7 +1573,11 @@ export default function App() {
                     { id: 'IN_PROGRESS', label: 'In Progress', count: allDisplayTasks.filter(t => t.status === 'IN_PROGRESS').length },
                     { id: 'AWAITING_PAYOUT', label: 'Cooling Off', count: allDisplayTasks.filter(t => t.status === 'AWAITING_PAYOUT').length },
                     { id: 'DISPUTED', label: 'Disputed', count: allDisplayTasks.filter(t => t.status === 'DISPUTED').length },
-                    { id: 'CLOSED', label: 'Closed', count: allDisplayTasks.filter(t => t.status === 'CLOSED').length }
+                    { id: 'CLOSED', label: 'Closed', count: allDisplayTasks.filter(t => t.status === 'CLOSED').length },
+                    ...(account ? [
+                      { id: 'MY_CREATED', label: '👑 My Created', count: allDisplayTasks.filter(t => account && t.client && account.trim().toLowerCase() === t.client.trim().toLowerCase()).length },
+                      { id: 'MY_WORKING', label: '👷 My Assigned', count: allDisplayTasks.filter(t => account && t.worker && account.trim().toLowerCase() === t.worker.trim().toLowerCase() && t.worker !== '0x0000000000000000000000000000000000000000').length }
+                    ] : [])
                   ].map(f => (
                     <button
                       key={f.id}
@@ -1638,11 +1648,26 @@ export default function App() {
                         {/* CARD HEADER */}
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div className="space-y-1.5 flex-1 min-w-[280px]">
-                            <div className="flex items-center gap-2.5 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-mono text-xs text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded-md">
                                 #{task.id}
                               </span>
                               {getStatusBadge(task.status)}
+                              {account && isClient && (
+                                <span className="px-2.5 py-0.5 bg-purple-500/15 text-purple-300 border border-purple-500/30 rounded-full font-semibold text-[11px] flex items-center gap-1">
+                                  👑 Your Escrow (Creator)
+                                </span>
+                              )}
+                              {account && isWorker && (
+                                <span className="px-2.5 py-0.5 bg-blue-500/15 text-blue-300 border border-blue-500/30 rounded-full font-semibold text-[11px] flex items-center gap-1">
+                                  👷 Your Task (Worker)
+                                </span>
+                              )}
+                              {account && !isClient && !isWorker && (
+                                <span className="px-2.5 py-0.5 bg-zinc-800/80 text-zinc-400 border border-zinc-700/60 rounded-full text-[11px] flex items-center gap-1">
+                                  👀 Public Observer
+                                </span>
+                              )}
                             </div>
                             <h3 className="text-lg font-bold text-white tracking-tight">
                               {task.title}
@@ -1670,6 +1695,7 @@ export default function App() {
                               title="Click to copy"
                             >
                               {task.client.slice(0, 6)}...{task.client.slice(-4)}
+                              {isClient && <span className="text-purple-400 font-sans text-[10px] bg-purple-500/20 px-1.5 py-0.2 rounded border border-purple-500/30">You</span>}
                               {copiedAddress === `c_${task.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-zinc-500" />}
                             </span>
                           </div>
@@ -1682,6 +1708,7 @@ export default function App() {
                                 className="text-zinc-300 font-semibold hover:text-white cursor-pointer flex items-center gap-1"
                               >
                                 {task.worker.slice(0, 6)}...{task.worker.slice(-4)}
+                                {isWorker && <span className="text-blue-400 font-sans text-[10px] bg-blue-500/20 px-1.5 py-0.2 rounded border border-blue-500/30">You</span>}
                                 {copiedAddress === `w_${task.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-zinc-500" />}
                               </span>
                             ) : (
@@ -1780,6 +1807,16 @@ export default function App() {
                                 <Clock className="w-3.5 h-3.5 animate-pulse" /> 24h Cooling-Off Window active
                               </span>
                             )}
+                            {(task.status === 'IN_PROGRESS' || task.status === 'NEEDS_REVISION') && isClient && (
+                              <span className="text-zinc-400 flex items-center gap-1.5 text-xs">
+                                ⏳ Assigned to Worker ({task.worker.slice(0, 6)}...{task.worker.slice(-4)}). Waiting for deliverable submission.
+                              </span>
+                            )}
+                            {(task.status === 'IN_PROGRESS' || task.status === 'NEEDS_REVISION') && !isClient && !isWorker && (
+                              <span className="text-zinc-500 flex items-center gap-1.5 text-xs">
+                                👀 Worker assigned. Work in progress.
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2.5 flex-wrap">
@@ -1809,9 +1846,9 @@ export default function App() {
                                 )
                               ) : (
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-xs text-amber-400/90 flex items-center gap-1.5 bg-amber-500/10 px-3.5 py-2 rounded-xl border border-amber-500/20">
+                                  <span className="text-xs text-amber-300/90 flex items-center gap-1.5 bg-amber-500/10 px-3.5 py-2 rounded-xl border border-amber-500/30 font-medium">
                                     <AlertCircle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                                    <span><strong>Task Creator:</strong> You are connected as the Client for this escrow. Protocol security rules prohibit clients from claiming their own tasks. Switch to a different worker wallet to proceed.</span>
+                                    <span><strong>Creator Role:</strong> You created this escrow. Protocol security prohibits clients from accepting/staking their own tasks. Switch MetaMask account to a worker wallet to claim.</span>
                                   </span>
                                 </div>
                               )
@@ -1827,7 +1864,7 @@ export default function App() {
                               </button>
                             )}
 
-                            {/* RAISE DISPUTE */}
+                            {/* RAISE DISPUTE (Only Client or Worker) */}
                             {task.status === 'AWAITING_PAYOUT' && (isClient || isWorker) && (
                               <button
                                 onClick={() => setDisputeTargetId(task.id)}
@@ -1837,8 +1874,8 @@ export default function App() {
                               </button>
                             )}
 
-                            {/* FINALIZE PAYOUT */}
-                            {task.status === 'AWAITING_PAYOUT' && (
+                            {/* FINALIZE PAYOUT (Only Client or Worker) */}
+                            {task.status === 'AWAITING_PAYOUT' && (isClient || isWorker) && (
                               <button
                                 onClick={() => handleFinalizePayout(task.id)}
                                 disabled={loading}
@@ -1848,7 +1885,14 @@ export default function App() {
                               </button>
                             )}
 
-                            {/* RECOVER STUCK FUNDS */}
+                            {/* OBSERVER VIEW FOR AWAITING_PAYOUT */}
+                            {task.status === 'AWAITING_PAYOUT' && !isClient && !isWorker && (
+                              <span className="text-xs text-zinc-500 italic py-1.5">
+                                👀 Observer View (Only Client or Worker can finalize)
+                              </span>
+                            )}
+
+                            {/* RECOVER STUCK FUNDS (Client Only) */}
                             {(task.status === 'OPEN' || task.status === 'IN_PROGRESS' || task.status === 'NEEDS_REVISION') && isClient && (
                               <button
                                 onClick={() => handleRecoverStuckFunds(task.id)}
