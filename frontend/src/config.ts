@@ -1,9 +1,9 @@
 export const STUDIONET_CONFIG = {
-  id: 61999,
-  name: 'GenLayer Studio Network',
+  id: 61997,
+  name: 'GenLayer Studio Next',
   nativeCurrency: { name: 'GEN Token', symbol: 'GEN', decimals: 18 },
-  rpcUrls: { default: { http: ['https://studio.genlayer.com/api'] } },
-  blockExplorerUrls: ['https://genlayer-explorer.vercel.app']
+  rpcUrls: { default: { http: ['https://studio-next.genlayer.com/api'] } },
+  blockExplorerUrls: ['https://explorer-studio.genlayer.com']
 };
 
 export const DEFAULT_ESCROW_CONTRACT_ADDRESS = (import.meta as any).env?.VITE_ESCROW_CONTRACT_ADDRESS || '0xFAD28fb892F51c2491DD991D50E909dAda8Ec5aD';
