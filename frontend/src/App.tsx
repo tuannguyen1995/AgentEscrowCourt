@@ -114,7 +114,7 @@ const APP_VERSION = '1.0.0';
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'escrows' | 'create' | 'leaderboard' | 'architecture'>('escrows');
+  const [activeTab, setActiveTab] = useState<'escrows' | 'create' | 'leaderboard' | 'architecture' | 'about'>('escrows');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   // Contract Addresses (stored in localStorage or from env)
@@ -1093,7 +1093,7 @@ export default function App() {
         <div className="bg-[#0c121e]/90 border-b border-zinc-800/80 px-4 py-1.5 text-xs text-zinc-400 flex justify-between items-center backdrop-blur-md">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1.5 text-zinc-300 font-medium text-[11px]">
-              <Radio className="w-3 h-3 text-emerald-400 animate-pulse" /> GenLayer Studionet • Chain ID 61999
+              <Radio className="w-3 h-3 text-emerald-400 animate-pulse" /> {STUDIONET_CONFIG.name} • Chain ID {STUDIONET_CONFIG.id}
             </span>
             <span className="hidden sm:inline text-zinc-500">|</span>
             <span className="hidden sm:inline text-zinc-400 text-[11px]">Optimistic Democracy & AI Jury Consensus</span>
@@ -1118,7 +1118,7 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-white text-base tracking-tight">AgentEscrowCourt</span>
                   <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[10px] font-mono font-medium">
-                    Production
+                    Studio Next
                   </span>
                 </div>
                 <p className="text-[11px] text-zinc-400 hidden sm:block">Decentralized AI Adjudication & Escrow</p>
@@ -1178,6 +1178,18 @@ export default function App() {
               >
                 <Code2 className="w-3.5 h-3.5 text-blue-400" />
                 <span>Architecture</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('about')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                  activeTab === 'about'
+                    ? 'bg-zinc-800 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                <span>About App</span>
               </button>
             </nav>
 
@@ -2160,9 +2172,113 @@ export default function App() {
                   <span className="font-bold text-white text-sm flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-teal-400" /> 4. Stuck-Fund Emergency Recovery
                   </span>
-                  <p className="text-zinc-400 leading-relaxed">
-                    Clients retain the right to recover deposited escrow funds via <code className="text-zinc-200 bg-zinc-800 px-1 py-0.5 rounded font-mono">recover_stuck_funds</code> if the task is abandoned or misses deadlines.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: ABOUT PROTOCOL OVERVIEW */}
+          {activeTab === 'about' && (
+            <div className="max-w-4xl mx-auto space-y-6">
+              {/* HERO CARD */}
+              <div className="p-6 bg-gradient-to-br from-purple-950/40 via-zinc-900/80 to-emerald-950/30 border border-purple-500/30 rounded-3xl relative overflow-hidden shadow-[0_0_30px_rgba(168,85,247,0.1)]">
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  <span className="px-3 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-full text-xs font-semibold font-mono flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                    Protocol Overview & Verification Specs
+                  </span>
+                  <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-mono font-medium">
+                    {STUDIONET_CONFIG.name} (Chain ID {STUDIONET_CONFIG.id})
+                  </span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-3">
+                  Agent Escrow Court: Autonomous AI Jury Adjudication
+                </h2>
+                <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed mt-2 max-w-3xl">
+                  Agent Escrow Court is a decentralized autonomous escrow and dispute resolution platform powered by GenLayer Intelligent Contracts. It solves trust issues in freelance gig economies and AI agent service markets by evaluating subjective off-chain deliverables through multi-validator AI consensus.
+                </p>
+              </div>
+
+              {/* CORE FEATURES GRID */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-5 bg-zinc-900/80 border border-zinc-800 rounded-2xl space-y-2 hover:border-emerald-500/40 transition">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                    <Scale className="w-4 h-4" />
+                    1. Autonomous AI Jury Adjudication
+                  </div>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    GenLayer validators fetch off-chain evidence via <code className="text-emerald-300 font-mono">gl.nondet.web.render</code> and execute LLM consensus via <code className="text-emerald-300 font-mono">gl.vm.run_nondet</code>, delivering a <code className="text-emerald-400 font-bold">RELEASE</code> or <code className="text-rose-400 font-bold">REFUND</code> verdict on-chain with detailed evaluation traces.
                   </p>
+                </div>
+
+                <div className="p-5 bg-zinc-900/80 border border-zinc-800 rounded-2xl space-y-2 hover:border-purple-500/40 transition">
+                  <div className="flex items-center gap-2 text-purple-400 font-bold text-sm">
+                    <ShieldCheck className="w-4 h-4" />
+                    2. Cryptographic Proof Pinning (SHA-256)
+                  </div>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    Escrow tasks pin requirements on-chain using SHA-256 hashes. If any party attempts to modify the criteria document after creation, the AI Jury immediately issues an <code className="text-orange-400 font-bold">ESCALATE</code> verdict (100% confidence).
+                  </p>
+                </div>
+
+                <div className="p-5 bg-zinc-900/80 border border-zinc-800 rounded-2xl space-y-2 hover:border-amber-500/40 transition">
+                  <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+                    <Coins className="w-4 h-4" />
+                    3. 15% Worker Collateral Staking
+                  </div>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    To accept an open task, Workers must stake a 15% collateral lock into the smart contract. This aligns economic game theory incentives, ensures commitment, and eliminates bot spam claims.
+                  </p>
+                </div>
+
+                <div className="p-5 bg-zinc-900/80 border border-zinc-800 rounded-2xl space-y-2 hover:border-blue-500/40 transition">
+                  <div className="flex items-center gap-2 text-blue-400 font-bold text-sm">
+                    <Trophy className="w-4 h-4" />
+                    4. On-Chain Dynamic Reputation
+                  </div>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    Cross-contract invocations automatically update the <code className="text-blue-300 font-mono">AgentReputation.py</code> contract upon successful task payout, ranking top-performing agents on the live Leaderboard.
+                  </p>
+                </div>
+              </div>
+
+              {/* VERIFICATION & SPECS BOX */}
+              <div className="p-5 bg-zinc-900/90 border border-zinc-800 rounded-2xl space-y-3 font-mono text-xs">
+                <div className="text-white font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Code2 className="w-4 h-4 text-emerald-400" /> Contract & Verification Links
+                  </span>
+                  <span className="text-[10px] text-zinc-400 font-normal">Mined on Studio Next (61997)</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] pt-1">
+                  <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800/80">
+                    <span className="text-zinc-500 block text-[10px]">Escrow Contract Address</span>
+                    <span className="text-emerald-400 font-semibold break-all">{escrowContractAddress}</span>
+                  </div>
+                  <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800/80">
+                    <span className="text-zinc-500 block text-[10px]">Reputation Contract Address</span>
+                    <span className="text-amber-400 font-semibold break-all">{reputationContractAddress}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-zinc-800 text-[11px] flex-wrap gap-2">
+                  <a
+                    href="https://explorer-studio.genlayer.com"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-zinc-400 hover:text-emerald-400 flex items-center gap-1 transition"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> Explorer Studio Next
+                  </a>
+                  <a
+                    href="https://github.com/tuannguyen1995/AgentEscrowCourt"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-zinc-400 hover:text-purple-400 flex items-center gap-1 transition"
+                  >
+                    <Globe className="w-3.5 h-3.5" /> GitHub Code Repo
+                  </a>
                 </div>
               </div>
             </div>
